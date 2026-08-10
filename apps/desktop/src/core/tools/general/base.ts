@@ -8,7 +8,7 @@ export abstract class BaseGeneralTool extends BaseTool {
   // The configured target for a media service, or a "not configured" result the tool returns directly.
   protected requireSlot(service: MediaService, label: string): LLMConfig | ToolResult {
     const target = this.llm.resolve(service);
-    if (!target) return { ok: false, output: `${label} is not configured. Assign a model in Settings → Media models.` };
+    if (!target) return { ok: false, output: `${label} is not configured. Assign a model in Settings → Providers.` };
     return target;
   }
 }

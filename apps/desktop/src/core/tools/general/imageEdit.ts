@@ -6,26 +6,26 @@ import { getAppConfig } from "../../config/index.ts";
 import { runImageGeneration } from "../helpers/imageGeneration.ts";
 import type { PreparedSave } from "../helpers/imageSave.ts";
 
-// ImageCompose: generate a NEW image from a prompt plus one or more REFERENCE images — reuse a prior image
+// ImageEdit: generate a NEW image from a prompt plus one or more REFERENCE images — reuse a prior image
 // (a hero/character) to keep a subject or style consistent, combine several references, or restyle one.
-// Editing an image is just the single-reference case. Runs the imageEdit slot (/images/edits).
-// A reference is an img-N alias from the conversation (pre-resolved by the engine into ctx.mediaRefs — works
-// in plain chat and on web) or a workspace path (needs an open workspace; fs helpers load dynamically so this
-// general, web-bundled tool never pulls node:fs into the web graph).
-export class ImageCompose extends BaseGeneralTool {
+// Editing an image is just the single-reference case. Resolves the one `image` pool; passing references
+// routes the provider to /images/edits. A reference is an img-N alias from the conversation (pre-resolved
+// by the engine into ctx.mediaRefs — works in plain chat and on web) or a workspace path (needs an open
+// workspace; fs helpers load dynamically so this general, web-bundled tool never pulls node:fs into the web graph).
+export class ImageEdit extends BaseGeneralTool {
   override canRun(): boolean {
-    return this.llm.resolve("imageEdit") != null;
+    return this.llm.resolve("image") != null;
   }
 
   override single(): boolean {
-    return true; // one compose per step — parallel copies collide on output names / hammer the server
+    return true; // one edit per step — parallel copies collide on output names / hammer the server
   }
 
   get schema(): ToolSpec {
     return {
       type: "function",
       function: {
-        name: "ImageCompose",
+        name: "ImageEdit",
         description:
           "Generate a new image from a prompt PLUS one or more reference images. Use it to reuse an earlier " +
           "image (e.g. a hero, character, or a screenshot the user pasted) so a subject/style stays consistent, " +
@@ -33,7 +33,7 @@ export class ImageCompose extends BaseGeneralTool {
           "conversation (works everywhere) or a workspace image path (needs an open workspace). The result is " +
           "returned to you with its own img-N alias — chain it into the next compose to iterate. When a " +
           "workspace is open the result is also saved under `name`. For text-only generation with no reference, " +
-          "use ImageGenerate. Only one ImageCompose runs per turn.",
+          "use ImageGenerate. Only one ImageEdit runs per turn.",
         parameters: {
           type: "object",
           additionalProperties: false,
@@ -88,31 +88,31 @@ export class ImageCompose extends BaseGeneralTool {
 
   async run(args: Record<string, unknown>, cwd?: string, signal?: AbortSignal, ctx?: ToolRunCtx): Promise<ToolResult> {
     const prompt = String(args.prompt ?? "").trim();
-    if (!prompt) return { ok: false, output: `ImageCompose rejected: missing required "prompt".` };
+    if (!prompt) return { ok: false, output: `ImageEdit rejected: missing required "prompt".` };
     const entries = Array.isArray(args.references) ? args.references.filter((p): p is string => typeof p === "string" && p.trim() !== "").map((p) => p.trim()) : [];
-    if (!entries.length) return { ok: false, output: `ImageCompose rejected: "references" must list at least one img-N alias or workspace image path.` };
+    if (!entries.length) return { ok: false, output: `ImageEdit rejected: "references" must list at least one img-N alias or workspace image path.` };
 
     // Resolve the references: img-N aliases from the engine-resolved map, everything else as a workspace path.
     const inputs: { b64: string; mime: string }[] = [];
     for (const entry of entries) {
       if (/^vid-\d+$/.test(entry)) {
-        return { ok: false, output: `ImageCompose rejected: "${entry}" is a video reference — only images can be composed.` };
+        return { ok: false, output: `ImageEdit rejected: "${entry}" is a video reference — only images can be composed.` };
       }
       if (/^img-\d+$/.test(entry)) {
         const hit = ctx?.mediaRefs?.[entry];
         const parsed = hit ? parseDataUrl(hit.url) : null;
         if (!parsed) {
-          return { ok: false, output: `ImageCompose rejected: unknown reference "${entry}" — use a reference shown in the conversation, or a workspace path.` };
+          return { ok: false, output: `ImageEdit rejected: unknown reference "${entry}" — use a reference shown in the conversation, or a workspace path.` };
         }
         inputs.push(parsed);
         continue;
       }
       if (!cwd) {
-        return { ok: false, output: `ImageCompose rejected: "${entry}" looks like a path, but no workspace is open — use an img-N reference from the conversation instead.` };
+        return { ok: false, output: `ImageEdit rejected: "${entry}" looks like a path, but no workspace is open — use an img-N reference from the conversation instead.` };
       }
       const { readWorkspaceImage } = await import("../helpers/imageSave.ts");
       const read = await readWorkspaceImage(entry, cwd, getAppConfig().media);
-      if ("error" in read) return { ok: false, output: `ImageCompose rejected: ${read.error}` };
+      if ("error" in read) return { ok: false, output: `ImageEdit rejected: ${read.error}` };
       inputs.push(read);
     }
 
@@ -122,14 +122,14 @@ export class ImageCompose extends BaseGeneralTool {
       const { prepareWorkspaceImageSave } = await import("../helpers/imageSave.ts");
       const name = typeof args.name === "string" && args.name.trim() ? args.name.trim() : `composed-${Date.now()}`;
       const prep = prepareWorkspaceImageSave({ root: cwd, outputDir: ctx?.imageOutputDir, name, overwrite: args.overwrite === true });
-      if ("error" in prep) return { ok: false, output: `ImageCompose rejected: ${prep.error}` };
+      if ("error" in prep) return { ok: false, output: `ImageEdit rejected: ${prep.error}` };
       save = prep;
     }
 
     // Inputs present → the trunk takes the edit/reference path (/images/edits); the output size is chosen
     // by the model (a 1:1 hero composed into a 16:9 scene, etc.) — NOT inherited from the reference.
     const out = await runImageGeneration(this.llm, { prompt, inputs, aspect: args.aspect, quality: args.quality, signal });
-    if ("error" in out) return { ok: false, output: `ImageCompose ${out.failed ? "failed" : "rejected"}: ${out.error}` };
+    if ("error" in out) return { ok: false, output: `ImageEdit ${out.failed ? "failed" : "rejected"}: ${out.error}` };
 
     const { b64, mime } = out;
     const image: Image = { url: `data:${mime};base64,${b64}`, mime, name: `${save?.base ?? "composed"}.${mimeToExt(mime)}` };

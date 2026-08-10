@@ -4,7 +4,7 @@ import { dropExtraSingleCalls } from "../src/core/sessions/engine.ts";
 import type { ToolCallRequest } from "../src/llm/types.ts";
 
 const call = (name: string, id: string): ToolCallRequest => ({ id, name, arguments: "{}", cwd: "" });
-const SINGLE = new Set(["ImageGenerate", "ImageCompose"]);
+const SINGLE = new Set(["ImageGenerate", "ImageEdit"]);
 const isSingle = (n: string): boolean => SINGLE.has(n);
 
 describe("dropExtraSingleCalls", () => {
@@ -15,7 +15,7 @@ describe("dropExtraSingleCalls", () => {
 
   it("keeps the first of EACH distinct single tool independently", () => {
     const out = dropExtraSingleCalls(
-      [call("ImageGenerate", "a"), call("ImageCompose", "b"), call("ImageGenerate", "c"), call("ImageCompose", "d")],
+      [call("ImageGenerate", "a"), call("ImageEdit", "b"), call("ImageGenerate", "c"), call("ImageEdit", "d")],
       isSingle,
     );
     expect(out.map((c) => c.id)).toEqual(["a", "b"]);

@@ -59,7 +59,7 @@ export class ImageDescribe extends BaseWorkspaceTool {
     const p = String(args.path ?? "");
     if (!p) return { ok: false, output: `ImageDescribe rejected: missing required "path". Example: {"path":"/workspace/assets/photo.png"}` };
     if (!this.llm.resolve("imageRec")) {
-      return { ok: false, output: `ImageDescribe is not configured. Assign an image recognition model in Settings → Media models.` };
+      return { ok: false, output: `ImageDescribe is not configured. Assign an image recognition model in Settings → Providers.` };
     }
     const query = typeof args.query === "string" && args.query.trim() ? args.query.trim() : "Describe this image in detail: subjects, layout, text, and anything notable.";
     try {

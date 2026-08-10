@@ -15,10 +15,10 @@ function fmtMB(bytes: number): string {
 }
 
 export class ImageLoad extends BaseWorkspaceTool {
-  // Putting an image in front of the model is pointless if it can't see images — gated on the main
-  // model's declared image input (the Accepts checkbox, a plain boolean). Withheld + refused per call.
+  // Putting an image in front of the model is pointless if it can't see images — gated on the chat
+  // (`text` pool) model's declared image input (a plain boolean). Withheld + refused per call.
   override canRun(): boolean {
-    return this.llm.resolve("main")?.input?.image === true;
+    return this.llm.resolve("text")?.input?.image === true;
   }
 
   get schema(): ToolSpec {

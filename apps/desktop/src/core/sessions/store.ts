@@ -812,7 +812,7 @@ export function toChatMessages(messages: Message[], input?: NonNullable<ChatMode
       // out that the ALIAS is the tool handle: a filename-ish display name ("pasted.png") otherwise
       // tempts the model into inventing a workspace path that doesn't exist.
       const sentRefs = [...images, ...video].filter((g) => g.ref).map(refLabel);
-      const refNote = `[attached media: ${sentRefs.join(", ")} — these are conversation attachments, not workspace files; reference them by alias (e.g. "img-1") in tool calls like ImageCompose]`;
+      const refNote = `[attached media: ${sentRefs.join(", ")} — these are conversation attachments, not workspace files; reference them by alias (e.g. "img-1") in tool calls like ImageEdit]`;
       if (sentRefs.length) content = content ? `${content}\n\n${refNote}` : refNote;
       if (dropped.length) content = content ? `${content}\n\n${droppedNote(dropped)}` : droppedNote(dropped);
       if (hidden.length) content = content ? `${content}\n\n${hiddenNote(hidden)}` : hiddenNote(hidden);

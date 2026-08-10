@@ -1,5 +1,7 @@
 // The concurrency runner: cap + reserve enforcement, priority-fill, provider affinity,
 // warm-wait vs small-roam against the KV threshold, TTL re-bind, and bound-favored queueing.
+// The `text` pool carries both foreground chat and background sub-agent runs (opts.background);
+// reserve is the foreground-held headroom over the background open band.
 import { describe, it, expect } from "vitest";
 
 import { RunnerEngine } from "../src/core/runner/engine.ts";
@@ -30,14 +32,14 @@ function harness(pools: RunnerPools) {
 
 describe("cap", () => {
   it("holds at c and queues the overflow; releasing hands the slot to the waiter", async () => {
-    const { engine } = harness({ main: [slot("A", 2)] });
-    const a = await engine.acquire("main", "s1", 0);
-    const b = await engine.acquire("main", "s2", 0);
+    const { engine } = harness({ text: [slot("A", 2)] });
+    const a = await engine.acquire("text", "s1", 0);
+    const b = await engine.acquire("text", "s2", 0);
     expect(a?.modelKey).toBe(key("A"));
     expect(b?.modelKey).toBe(key("A"));
     expect(engine.inflight(key("A")).total).toBe(2);
 
-    const pending = engine.acquire("main", "s3", 0);
+    const pending = engine.acquire("text", "s3", 0);
     expect(engine.isWaiting("s3")).toBe(true);
 
     engine.release("s1");
@@ -47,43 +49,41 @@ describe("cap", () => {
 });
 
 describe("reserve", () => {
-  it("caps children at the open band while main may use the whole cap", async () => {
-    // Same model in both pools, c=5 reserve=2 → children get 3, main can fill to 5.
-    const shared = slot("A", 5, 2);
-    const { engine } = harness({ main: [shared], subAgent: [shared] });
+  it("caps background runs at the open band while foreground may use the whole cap", async () => {
+    // c=5 reserve=2 → background runs get 3, foreground can fill to 5.
+    const { engine } = harness({ text: [slot("A", 5, 2)] });
 
-    await engine.acquire("subAgent", "c1", 0);
-    await engine.acquire("subAgent", "c2", 0);
-    await engine.acquire("subAgent", "c3", 0);
-    const c4 = engine.acquire("subAgent", "c4", 0);
+    await engine.acquire("text", "c1", 0, { background: true });
+    await engine.acquire("text", "c2", 0, { background: true });
+    await engine.acquire("text", "c3", 0, { background: true });
+    const c4 = engine.acquire("text", "c4", 0, { background: true });
     expect(engine.isWaiting("c4")).toBe(true); // 4th child blocked: open band (3) full
     expect(engine.inflight(key("A")).child).toBe(3);
 
-    // main still has headroom up to c=5 (total now 3)
-    const m1 = await engine.acquire("main", "m1", 0);
-    const m2 = await engine.acquire("main", "m2", 0);
+    // foreground still has headroom up to c=5 (total now 3)
+    const m1 = await engine.acquire("text", "m1", 0);
+    const m2 = await engine.acquire("text", "m2", 0);
     expect(m1?.modelKey).toBe(key("A"));
     expect(m2?.modelKey).toBe(key("A"));
     expect(engine.inflight(key("A")).total).toBe(5);
-    const m3 = engine.acquire("main", "m3", 0);
+    const m3 = engine.acquire("text", "m3", 0);
     expect(engine.isWaiting("m3")).toBe(true); // cap reached
 
     engine.release("c1");
-    expect(await c4).toBeTruthy(); // freed child slot goes to the queued child
+    expect(await c4).toBeTruthy(); // freed child slot goes to the queued background run
     void m3;
   });
 
   it("clamps a reserve > c to a zero band instead of a negative one (no phantom child seats)", async () => {
     // A misconfigured reserve once made the band (c − reserve) negative, so `cur.child >= band` was
-    // always true and every child silently blocked. Clamped to 0: children blocked, main unaffected.
-    const shared = slot("A", 2, 5); // reserve 5 > c 2
-    const { engine } = harness({ main: [shared], subAgent: [shared] });
+    // always true and every child silently blocked. Clamped to 0: children blocked, foreground unaffected.
+    const { engine } = harness({ text: [slot("A", 2, 5)] }); // reserve 5 > c 2
 
-    const c1 = engine.acquire("subAgent", "c1", 0);
+    const c1 = engine.acquire("text", "c1", 0, { background: true });
     expect(engine.isWaiting("c1")).toBe(true); // band is 0, not -3 → no child seat
     expect(engine.inflight(key("A")).child).toBe(0);
 
-    const m1 = await engine.acquire("main", "m1", 0); // main still uses the full cap
+    const m1 = await engine.acquire("text", "m1", 0); // foreground still uses the full cap
     expect(m1?.modelKey).toBe(key("A"));
     void c1;
   });
@@ -93,10 +93,10 @@ describe("drop", () => {
   it("tears down a same-id waiter before release pumps, so no fresh lease escapes cleanup", async () => {
     // Double-acquire leaves one waiter live and one still queued under the same id. drop() must free
     // both; if release() pumped first, the queued twin would be granted a lease that then leaks.
-    const { engine } = harness({ main: [slot("A", 1)] });
-    await engine.acquire("main", "occupy", 0); // A full (total 1)
-    const first = engine.acquire("main", "dup", 0); // queued (waiter 1)
-    const second = engine.acquire("main", "dup", 0); // queued again, same id (waiter 2)
+    const { engine } = harness({ text: [slot("A", 1)] });
+    await engine.acquire("text", "occupy", 0); // A full (total 1)
+    const first = engine.acquire("text", "dup", 0); // queued (waiter 1)
+    const second = engine.acquire("text", "dup", 0); // queued again, same id (waiter 2)
     expect(engine.isWaiting("dup")).toBe(true);
 
     engine.release("occupy"); // pump grants waiter 1 → "dup" live; waiter 2 still queued
@@ -112,9 +112,9 @@ describe("drop", () => {
 
 describe("dispose", () => {
   it("settles queued waiters with null instead of stranding them", async () => {
-    const { engine } = harness({ main: [slot("A", 1)] });
-    await engine.acquire("main", "holder", 0); // A full
-    const pending = engine.acquire("main", "waiter", 0); // queued
+    const { engine } = harness({ text: [slot("A", 1)] });
+    await engine.acquire("text", "holder", 0); // A full
+    const pending = engine.acquire("text", "waiter", 0); // queued
     expect(engine.isWaiting("waiter")).toBe(true);
 
     engine.dispose();
@@ -125,9 +125,9 @@ describe("dispose", () => {
 
 describe("priority fill", () => {
   it("fills the top model first, spills to the next when it's saturated", async () => {
-    const { engine } = harness({ main: [slot("A", 1), slot("B", 5)] });
-    const a = await engine.acquire("main", "s1", 0);
-    const b = await engine.acquire("main", "s2", 0);
+    const { engine } = harness({ text: [slot("A", 1), slot("B", 5)] });
+    const a = await engine.acquire("text", "s1", 0);
+    const b = await engine.acquire("text", "s2", 0);
     expect(a?.modelKey).toBe(key("A")); // top tier first
     expect(b?.modelKey).toBe(key("B")); // A full → spill down
   });
@@ -135,12 +135,12 @@ describe("priority fill", () => {
 
 describe("affinity", () => {
   it("a returning session re-binds to its provider even when a higher tier is free", async () => {
-    const { engine } = harness({ main: [slot("A", 1), slot("B", 1)] });
-    await engine.acquire("main", "s1", 0); // A
-    await engine.acquire("main", "s2", 0); // B
+    const { engine } = harness({ text: [slot("A", 1), slot("B", 1)] });
+    await engine.acquire("text", "s1", 0); // A
+    await engine.acquire("text", "s2", 0); // B
     engine.release("s1"); // A free, s1 bound to A
     engine.release("s2"); // B free, s2 bound to B
-    const again = await engine.acquire("main", "s2", 0);
+    const again = await engine.acquire("text", "s2", 0);
     expect(again?.modelKey).toBe(key("B")); // not A, though A is also free — stays warm
   });
 });
@@ -151,12 +151,12 @@ describe("warm-wait vs roam", () => {
       [200, undefined],
       [10, key("B")],
     ] as const) {
-      const { engine } = harness({ main: [slot("A", 1), slot("B", 5)] });
-      await engine.acquire("main", "s1", 0); // A
+      const { engine } = harness({ text: [slot("A", 1), slot("B", 5)] });
+      await engine.acquire("text", "s1", 0); // A
       engine.release("s1"); // s1 bound to A
-      await engine.acquire("main", "s2", 0); // A taken again (top, free) → A full
+      await engine.acquire("text", "s2", 0); // A taken again (top, free) → A full
 
-      const p = engine.acquire("main", "s1", ctx);
+      const p = engine.acquire("text", "s1", ctx);
       if (expected === undefined) {
         expect(engine.isWaiting("s1")).toBe(true); // big context holds out for A
         expect(engine.inflight(key("B")).total).toBe(0); // did NOT roam to B
@@ -169,11 +169,11 @@ describe("warm-wait vs roam", () => {
 
 describe("TTL re-bind", () => {
   it("a warm waiter past its binding TTL roams instead of waiting forever", async () => {
-    const { engine, tick } = harness({ main: [slot("A", 1), slot("B", 5)] });
-    await engine.acquire("main", "s1", 0); // A (binding expires at t=1000)
+    const { engine, tick } = harness({ text: [slot("A", 1), slot("B", 5)] });
+    await engine.acquire("text", "s1", 0); // A (binding expires at t=1000)
     engine.release("s1");
-    await engine.acquire("main", "s2", 0); // A full again
-    const p = engine.acquire("main", "s1", 200); // big → waits on A
+    await engine.acquire("text", "s2", 0); // A full again
+    const p = engine.acquire("text", "s1", 200); // big → waits on A
     expect(engine.isWaiting("s1")).toBe(true);
     tick(1500); // past the binding TTL → KV gone
     engine.pump();
@@ -183,13 +183,13 @@ describe("TTL re-bind", () => {
 
 describe("queue favoring", () => {
   it("a freed slot goes to the waiter bound to it over an earlier cold waiter", async () => {
-    const { engine } = harness({ main: [slot("A", 1)] });
-    await engine.acquire("main", "warm", 0); // A
+    const { engine } = harness({ text: [slot("A", 1)] });
+    await engine.acquire("text", "warm", 0); // A
     engine.release("warm"); // warm bound to A
-    await engine.acquire("main", "holder", 0); // A full again
+    await engine.acquire("text", "holder", 0); // A full again
 
-    const cold = engine.acquire("main", "cold", 0); // queued first, no binding
-    const warm = engine.acquire("main", "warm", 200); // queued second, bound to A
+    const cold = engine.acquire("text", "cold", 0); // queued first, no binding
+    const warm = engine.acquire("text", "warm", 200); // queued second, bound to A
     expect(engine.isWaiting("cold")).toBe(true);
     expect(engine.isWaiting("warm")).toBe(true);
 

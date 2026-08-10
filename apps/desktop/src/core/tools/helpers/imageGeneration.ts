@@ -1,4 +1,4 @@
-// The shared image-generation TRUNK behind every generating tool (ImageGenerate, ImageCompose, the
+// The shared image-generation TRUNK behind every generating tool (ImageGenerate, ImageEdit, the
 // comics generate tools): slot resolve, dimension math, prompt-style adaptation, and the model call —
 // the steps that must stay identical across consumers (docs/conventions/consolidation.md). Consumers
 // keep what is genuinely theirs: argument validation, reference resolution, naming/saving, result text.
@@ -22,9 +22,11 @@ export interface ImageGenRequest {
 export type ImageGenOutcome = { b64: string; mime: string } | { error: string; failed?: true };
 
 export async function runImageGeneration(llm: LLMClient, req: ImageGenRequest): Promise<ImageGenOutcome> {
-  const service = req.inputs?.length ? "imageEdit" : "imageGen";
-  const slot = llm.resolve(service);
-  if (!slot) return { error: `no model is assigned to the ${service} use case (Settings → Media models).` };
+  // ONE `image` pool: references present → the image provider routes to the edit endpoint (/images/edits);
+  // absent → generation (/images/generations). The tool doesn't pick the endpoint — the provider does.
+  const slot = llm.resolve("image");
+  if (!slot) return { error: `no model is assigned to the image use case (Settings → Providers).` };
+  const isEdit = !!req.inputs?.length;
 
   // We own the dimensions — the model never sets width/height; quality (a size tier) picks the base width.
   const max = parseDims(slot.model.maxImageSize);
@@ -34,11 +36,11 @@ export async function runImageGeneration(llm: LLMClient, req: ImageGenRequest): 
   const { w, h } = deriveSize(reqW, ASPECTS[aspect], max, cfg.fallbackWidth);
 
   const prompt =
-    service === "imageGen" && slot.model.promptStyle === "cosmos-json" ? await cosmosImagePrompt(llm, req.prompt, req.signal) : req.prompt;
+    !isEdit && slot.model.promptStyle === "cosmos-json" ? await cosmosImagePrompt(llm, req.prompt, req.signal) : req.prompt;
 
   try {
     const { b64, mime } = await llm.call({
-      service,
+      service: "image",
       messages: [{ role: "user", content: prompt }],
       signal: req.signal,
       handler: imageHandler(),

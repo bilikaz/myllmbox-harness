@@ -1,8 +1,7 @@
-import { UserCircle, Plug, Image, Database, Blocks, Settings, LayoutGrid } from "lucide-react";
+import { UserCircle, Plug, Database, Blocks, Settings, LayoutGrid } from "lucide-react";
 
 import { register } from "../../lib/registry.ts";
 import { ProfileSection } from "./ProfileSection.tsx";
-import { ProviderSection } from "./ProviderSection.tsx";
 import { ModelsSection } from "./ModelsSection.tsx";
 import { StorageSection } from "./StorageSection.tsx";
 import { PluginsSection } from "./PluginsSection.tsx";
@@ -21,20 +20,11 @@ register(
   },
   {
     region: "settings",
-    id: "provider",
-    title: "Provider",
+    id: "providers",
+    title: "Providers",
     icon: Plug,
-    route: "settings/provider",
+    route: "settings/providers",
     order: 1,
-    render: () => <ProviderSection />,
-  },
-  {
-    region: "settings",
-    id: "media",
-    title: "Media models",
-    icon: Image,
-    route: "settings/media",
-    order: 2,
     render: () => <ModelsSection />,
   },
   {

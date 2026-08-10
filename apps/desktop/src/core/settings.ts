@@ -1,29 +1,29 @@
 // Unified model settings — ONE provider registry (providers → models) plus the
-// per-service "active model" selection (services). `main` (the chat model) is just
-// another service alongside the media ones. config.llm is derived purely from
-// `services`. The two settings screens are views onto this: ProviderSection edits
-// the `main` service (synthesized to the flat ChatModelSettings shape), ModelsSection
-// manages the registry + media-service assignments.
+// per-pool "active model" selection (services). A model declares what it OUTPUTS
+// and what INPUTS it accepts; that in/out gates which of the 7 use-case pools it may
+// join (see `qualifies`). config.llm is derived purely from `services`. The one
+// "Providers" settings screen is a view onto this: the Providers tab manages the
+// registry, the Use-cases tab orders the pools.
 
 import { Consumer } from "./storage/consumer.ts";
 import type { Ctx } from "./ctx.ts";
 import {
   MEDIA_SERVICES,
-  type MediaApiKind,
   type MediaService,
+  type Modality,
   type ModelService,
   type ProviderKind,
   type ReasoningEffort,
   type TextProviderKind,
 } from "../llm/types.ts";
 import { writeLLMConfig, type LLMConfig, type LLMConfigList } from "./config/llm.ts";
-import { writeRunnerPools, modelKey, type RunnerPools, type RunnerSlot } from "./config/pools.ts";
+import { writeRunnerPools, type RunnerPools, type RunnerSlot } from "./config/pools.ts";
 import { listProviderModels } from "../llm/index.ts";
 import { errorMessage } from "../lib/errors.ts";
 
 const KEY = "myllmbox-harness:settings";
 
-const ALL_SERVICES: readonly ModelService[] = ["main", "subAgent", ...MEDIA_SERVICES];
+const ALL_SERVICES: readonly ModelService[] = ["text", ...MEDIA_SERVICES];
 
 // Per-model concurrency defaults — a model omits these until tuned.
 const DEFAULT_C = 5;
@@ -31,28 +31,45 @@ const DEFAULT_RESERVE = 2;
 
 export type MediaPromptStyle = "plain" | "cosmos-json";
 
-// A model under a provider. Identical structure for every service — chat knobs and
-// media knobs both optional; the service it's assigned to decides which apply.
+// A model under a provider. It declares two axes — `output` (the modality it produces) and `input`
+// (each modality it accepts, ALL explicit — nothing assumed). Those gate which pools it can join
+// (`qualifies`). Chat knobs apply when output==="text"; media knobs when it outputs image/video.
 export interface Model {
   id: string; // registry id
   modelId: string; // wire id
-  capabilities: ModelService[];
+  output: Modality; // what it produces: text | image | video | audio
+  input?: { text?: boolean; image?: boolean; video?: boolean; audio?: boolean }; // accepted inputs (explicit)
   // concurrency
   c?: number; // max concurrent in-flight calls (default 5)
-  reserve?: number; // slots kept main-only when this model serves both main + subAgent (default 2)
+  reserve?: number; // foreground-held slots on the text model (background sub-agent runs get the rest; default 2)
   rating?: number; // priority hint for ordering within a service pool (higher first)
-  // chat knobs
+  // chat knobs (output==="text")
   maxTokens?: number;
   reasoningEffort?: ReasoningEffort;
   thinkingBudget?: number;
   contextLength?: number;
-  input?: { image?: boolean; video?: boolean; audio?: boolean };
   imageMaxDim?: number;
   contextReserve?: number;
   // media knobs
   promptStyle?: MediaPromptStyle;
   maxImageSize?: string;
   maxVideoSize?: string;
+}
+
+// The gate: a model's output + accepted inputs decide which use-case pools it may join. A text-output
+// model that accepts text is a chat model (`text` pool); accepting a media input adds the matching
+// recognition pool. A media-output model joins its one output pool. Used to filter the assign UI (a
+// model only appears as an option in pools it qualifies for) and to prune stale assignments.
+export function qualifies(m: Model): ModelService[] {
+  if (m.output === "text") {
+    const out: ModelService[] = [];
+    if (m.input?.text) out.push("text"); // chat (+ sub-agent runs)
+    if (m.input?.image) out.push("imageRec");
+    if (m.input?.video) out.push("videoRec");
+    if (m.input?.audio) out.push("audioRec");
+    return out;
+  }
+  return [m.output as ModelService]; // "image" | "video" | "audio"
 }
 
 export interface Provider {
@@ -82,39 +99,18 @@ export type MediaProvider = Provider;
 export type MediaModel = Model;
 export type MediaRegistry = { providers: Provider[]; assignments: Partial<Record<ModelService, ModelAssignment[]>> };
 
-// The flat chat-config view the sessions engine + chat UI consume (the `main` service).
+// The flat chat-config view the sessions engine + chat UI consume (the `text` pool head).
 export interface ChatModelSettings extends LLMConfig {
-  input?: { image?: boolean; video?: boolean; audio?: boolean };
+  input?: { text?: boolean; image?: boolean; video?: boolean; audio?: boolean };
   imageMaxDim?: number;
   contextReserve?: number;
   models?: string[];
   modelLimits?: Record<string, number>;
 }
 
-const DEFAULT_PROVIDER = "default-provider";
-const DEFAULT_MODEL = "default-main";
-
-const DEFAULTS: SettingsState = {
-  providers: [
-    {
-      id: DEFAULT_PROVIDER,
-      name: "Default",
-      api: "openai",
-      baseUrl: "/llm",
-      models: [
-        {
-          id: DEFAULT_MODEL,
-          modelId: "Holo-3.1-35B",
-          capabilities: ["main"],
-          maxTokens: 30000,
-          reasoningEffort: "off",
-          input: { image: true },
-        },
-      ],
-    },
-  ],
-  services: { main: [{ providerId: DEFAULT_PROVIDER, modelId: DEFAULT_MODEL }] },
-};
+// Fresh install has NO seeded provider/model/assignment (D1 — bring-your-own-box: configure it first).
+// A wiped store hydrates to empty pools; config.llm is {} until the user assigns models.
+const DEFAULTS: SettingsState = { providers: [], services: {} };
 
 // A stored row must match the current SettingsState shape or we discard it for DEFAULTS —
 // resolvePools/chatView index `services[svc]` as arrays, so a legacy/corrupt shape would throw.
@@ -132,10 +128,10 @@ function isValidSettings(s: unknown): s is SettingsState {
 
 const newId = (): string => crypto.randomUUID();
 
-// Media capabilities a provider's models can be assigned to (the ModelsSection
-// checkboxes). `main` is managed by the chat screen, so it's not offered here.
-export function providerCaps(api: ProviderKind): readonly ModelService[] {
-  return api === "generate" ? ["imageGen"] : [...MEDIA_SERVICES, "subAgent"];
+// The output modalities a provider's models may declare (the model editor's Output choices). Media
+// generation is the OpenAI Images/Videos API only, so anthropic/gemini providers are text-output only.
+export function providerCaps(api: ProviderKind): readonly Modality[] {
+  return api === "openai" ? ["text", "image", "video", "audio"] : ["text"];
 }
 
 function findModel(providers: Provider[], ref: ModelAssignment | undefined): { p: Provider; m: Model } | null {
@@ -151,10 +147,10 @@ function pruneServices(
 ): SettingsState["services"] {
   const out: SettingsState["services"] = {};
   for (const svc of ALL_SERVICES) {
-    // main survives even if the model lacks an explicit capability flag; every other pool requires it.
+    // A model stays in a pool only while its in/out still qualifies it for that pool (the gate).
     const kept = (services[svc] ?? []).filter((ref) => {
       const hit = findModel(providers, ref);
-      return !!hit && (svc === "main" || hit.m.capabilities.includes(svc));
+      return !!hit && qualifies(hit.m).includes(svc);
     });
     if (kept.length) out[svc] = kept;
   }
@@ -220,12 +216,10 @@ class Settings extends Consumer<SettingsState> {
     return hit ? this.toConfig(hit.p, hit.m) : null;
   }
 
-  // The full ordered pool per service for the concurrency runner. `reserve` is non-zero
-  // only for a model that serves BOTH main and subAgent (a shared model's main headroom).
+  // The full ordered pool per service for the concurrency runner. `reserve` (foreground-held slots)
+  // applies only on the `text` pool — background sub-agent runs share it and get the open band (c − reserve).
   private resolvePools(): RunnerPools {
     const { providers, services } = this.state;
-    const mainKeys = new Set((services.main ?? []).map(modelKey));
-    const subKeys = new Set((services.subAgent ?? []).map(modelKey));
     const out: RunnerPools = {};
     for (const svc of ALL_SERVICES) {
       const slots: RunnerSlot[] = [];
@@ -233,8 +227,7 @@ class Settings extends Consumer<SettingsState> {
         const hit = findModel(providers, ref);
         const config = hit && this.toConfig(hit.p, hit.m);
         if (!hit || !config) continue;
-        const key = modelKey(ref);
-        const reserve = mainKeys.has(key) && subKeys.has(key) ? hit.m.reserve ?? DEFAULT_RESERVE : 0;
+        const reserve = svc === "text" ? hit.m.reserve ?? DEFAULT_RESERVE : 0;
         slots.push({ providerId: ref.providerId, modelId: ref.modelId, config, c: hit.m.c ?? DEFAULT_C, reserve });
       }
       if (slots.length) out[svc] = slots;
@@ -242,10 +235,10 @@ class Settings extends Consumer<SettingsState> {
     return out;
   }
 
-  // ── chat (main) view + edits ────────────────────────────────────────────────
+  // ── chat (`text` pool head) view ─────────────────────────────────────────────
   private chatView(): ChatModelSettings {
     if (this.chatCache) return this.chatCache;
-    const hit = findModel(this.state.providers, (this.state.services.main ?? [])[0]);
+    const hit = findModel(this.state.providers, (this.state.services.text ?? [])[0]);
     const v: ChatModelSettings = !hit
       ? { provider: { name: "", type: "openai", baseUrl: "" }, model: {}, models: [] }
       : {
@@ -276,58 +269,7 @@ class Settings extends Consumer<SettingsState> {
     return v.provider.baseUrl && v.model.id ? v : null;
   }
 
-  // Apply a patch to the `main` provider and/or model, creating them if main is unset.
-  private editMain(providerPatch: Partial<Provider>, modelPatch: Partial<Model>): void {
-    let { providers, services } = this.state;
-    let ref = (services.main ?? [])[0];
-    if (!findModel(providers, ref)) {
-      const pid = newId();
-      const mid = newId();
-      providers = [...providers, { id: pid, name: "Default", api: "openai", baseUrl: "", models: [{ id: mid, modelId: "", capabilities: ["main"] }] }];
-      ref = { providerId: pid, modelId: mid };
-      services = { ...services, main: [ref, ...(services.main ?? [])] };
-    }
-    const r = ref!;
-    providers = providers.map((p) =>
-      p.id !== r.providerId
-        ? p
-        : {
-            ...p,
-            ...providerPatch,
-            models: p.models.map((m) =>
-              m.id !== r.modelId ? m : { ...m, ...modelPatch, capabilities: m.capabilities.includes("main") ? m.capabilities : [...m.capabilities, "main"] },
-            ),
-          },
-    );
-    this.commit({ providers, services });
-  }
-
-  setChatProvider(patch: Partial<ChatModelSettings["provider"]>): void {
-    const p: Partial<Provider> = {};
-    if (patch.name !== undefined) p.name = patch.name;
-    if (patch.type !== undefined) p.api = patch.type;
-    if (patch.baseUrl !== undefined) p.baseUrl = patch.baseUrl;
-    if (patch.apiKey !== undefined) p.apiKey = patch.apiKey;
-    this.editMain(p, {});
-  }
-  setChatModel(patch: Partial<ChatModelSettings["model"]>): void {
-    const m: Partial<Model> = {};
-    if (patch.id !== undefined) m.modelId = patch.id;
-    if (patch.maxTokens !== undefined) m.maxTokens = patch.maxTokens;
-    if (patch.reasoningEffort !== undefined) m.reasoningEffort = patch.reasoningEffort;
-    if (patch.thinkingBudget !== undefined) m.thinkingBudget = patch.thinkingBudget;
-    if (patch.contextLength !== undefined) m.contextLength = patch.contextLength;
-    this.editMain({}, m);
-  }
-  setChatExtras(patch: Partial<ChatModelSettings>): void {
-    const m: Partial<Model> = {};
-    if ("input" in patch) m.input = patch.input;
-    if ("imageMaxDim" in patch) m.imageMaxDim = patch.imageMaxDim;
-    if ("contextReserve" in patch) m.contextReserve = patch.contextReserve;
-    this.editMain({}, m);
-  }
-
-  // ── registry CRUD (media screen) ─────────────────────────────────────────────
+  // ── registry CRUD (the Providers section) ────────────────────────────────────
   registry(): MediaRegistry {
     return (this.regCache ??= { providers: this.state.providers, assignments: this.state.services });
   }
@@ -345,17 +287,11 @@ class Settings extends Consumer<SettingsState> {
     const providers = this.state.providers.map((p) => {
       if (p.id !== id) return p;
       const next: Provider = { ...p, ...patch, id };
-      if (patch.api && patch.api !== p.api && patch.api === "generate") {
-        const first = next.models[0];
-        next.models = [
-          {
-            id: first?.id ?? newId(),
-            modelId: "",
-            capabilities: (first?.capabilities ?? []).filter((c) => (providerCaps("generate") as readonly ModelService[]).includes(c)),
-            maxImageSize: first?.maxImageSize,
-          },
-        ];
-        next.detected = undefined;
+      // Dialect changed: clamp each model's output to the new dialect's caps so stored state can't
+      // disagree with the editor's Output radio (e.g. openai→anthropic drops image output to text).
+      if (patch.api && patch.api !== p.api) {
+        const allowed = providerCaps(next.api);
+        next.models = next.models.map((m) => (allowed.includes(m.output) ? m : { ...m, output: allowed[0] }));
       }
       return next;
     });
@@ -369,30 +305,30 @@ class Settings extends Consumer<SettingsState> {
 
   addModel(providerId: string, wireId: string): string {
     const id = newId();
-    const providers = this.state.providers.map((p) =>
-      p.id === providerId
-        ? { ...p, models: [...p.models, { id, modelId: wireId, capabilities: [], ...(wireId.toLowerCase().includes("cosmos") ? { promptStyle: "cosmos-json" as const } : {}) }] }
-        : p,
-    );
+    // A new model defaults to a text (chat) model accepting text — so it shows up as a `text` pool
+    // option out of the box; the editor's Output/Input toggles change it for a media model.
+    const providers = this.state.providers.map((p) => {
+      if (p.id !== providerId) return p;
+      const seed: Model = { id, modelId: wireId, output: "text", input: { text: true } };
+      // Carry the context length the /models card already reported for this wire id (Detect fills
+      // p.modelLimits). Without this, adding a detected model after Detect drops its window and the
+      // 10% reserve can't engage until a re-detect — the regression the two-screen merge introduced.
+      const len = p.modelLimits?.[wireId];
+      if (len) seed.contextLength = len;
+      if (wireId.toLowerCase().includes("cosmos")) seed.promptStyle = "cosmos-json";
+      return { ...p, models: [...p.models, seed] };
+    });
     this.commit({ ...this.state, providers });
     return id;
   }
 
+  // Patch a model, then prune any pool it no longer qualifies for (the gate). Pool MEMBERSHIP is set
+  // explicitly in the Use-cases tab — changing in/out never auto-joins, only removes what stopped qualifying.
   updateModel(providerId: string, modelId: string, patch: Partial<Omit<Model, "id">>): void {
-    let providers = this.state.providers.map((p) =>
+    const providers = this.state.providers.map((p) =>
       p.id === providerId ? { ...p, models: p.models.map((m) => (m.id === modelId ? { ...m, ...patch, id: m.id } : m)) } : p,
     );
-    const services = pruneServices(this.state.services, providers);
-    const model = findModel(providers, { providerId, modelId })?.m;
-    // A ticked capability appends the model to that pool (kept if already listed). `main` is
-    // managed by the chat screen, not auto-filled here.
-    if (model)
-      for (const uc of model.capabilities) {
-        if (uc === "main") continue;
-        const list = services[uc] ?? [];
-        if (!list.some((r) => r.providerId === providerId && r.modelId === modelId)) services[uc] = [...list, { providerId, modelId }];
-      }
-    this.commit({ providers, services });
+    this.commit({ providers, services: pruneServices(this.state.services, providers) });
   }
 
   removeModel(providerId: string, modelId: string): void {
@@ -412,44 +348,34 @@ class Settings extends Consumer<SettingsState> {
     const out: Array<{ ref: ModelAssignment; label: string }> = [];
     for (const p of reg.providers) {
       for (const m of p.models) {
-        if (!m.capabilities.includes(service)) continue;
+        if (!qualifies(m).includes(service)) continue; // the gate: only models qualifying for this pool
         out.push({ ref: { providerId: p.id, modelId: m.id }, label: m.modelId ? `${p.name} : ${m.modelId}` : p.name });
       }
     }
     return out;
   }
 
-  async detect(ctx: Ctx, id: string): Promise<{ ok: boolean; count: number; error?: string }> {
+  // Detect a provider's models via the direct llm /models listing (yields context lengths when the
+  // endpoint reports max_model_len). Sets the detected list + per-model limits on the provider, and
+  // each matching model's contextLength — restoring the context-window display. Endpoints that omit
+  // max_model_len leave contextLength unset; the editor's manual Context length field covers that.
+  async detect(id: string): Promise<{ ok: boolean; count: number; error?: string }> {
     const provider = this.state.providers.find((p) => p.id === id);
     if (!provider) return { ok: false, count: 0, error: "provider not found" };
-    const r = await ctx.api.mediaModels?.(provider);
-    if (!r) return { ok: false, count: 0, error: "model listing is not supported here" };
-    if (!r.ok) return { ok: false, count: 0, error: r.error };
-    this.updateProvider(id, { detected: r.models });
-    return { ok: true, count: r.models.length };
-  }
-
-  // Chat detection uses the direct llm listing (yields context lengths), not the
-  // host media-listing path — detects the `main` provider.
-  async detectChat(): Promise<{ ok: boolean; count: number; error?: string }> {
-    const hit = findModel(this.state.providers, (this.state.services.main ?? [])[0]);
-    if (!hit) return { ok: false, count: 0, error: "no main provider configured" };
     try {
-      const infos = await listProviderModels({ name: hit.p.name, type: hit.p.api, baseUrl: hit.p.baseUrl, apiKey: hit.p.apiKey });
+      const infos = await listProviderModels({ name: provider.name, type: provider.api, baseUrl: provider.baseUrl, apiKey: provider.apiKey });
       const detected = infos.map((i) => i.id);
       const modelLimits: Record<string, number> = {};
       for (const i of infos) if (i.maxModelLen) modelLimits[i.id] = i.maxModelLen;
-      const ctxLen = modelLimits[hit.m.modelId];
-      // Set detected list + per-model limits on the provider, and the selected
-      // model's contextLength — restores the context-window display + reserve hint.
       const providers = this.state.providers.map((p) =>
-        p.id !== hit.p.id
+        p.id !== id
           ? p
           : {
               ...p,
               detected,
               modelLimits,
-              models: p.models.map((m) => (m.id !== hit.m.id ? m : { ...m, contextLength: ctxLen ?? m.contextLength })),
+              // Only text models read contextLength (the chat window); don't stamp it on media models.
+              models: p.models.map((m) => (m.output === "text" && modelLimits[m.modelId] ? { ...m, contextLength: modelLimits[m.modelId] } : m)),
             },
       );
       this.commit({ ...this.state, providers });
@@ -469,16 +395,12 @@ export function initSettings(ctx: Ctx): Settings {
   return inst;
 }
 
-// ── Chat facades (ProviderSection + sessions) ─────────────────────────────────
+// ── Chat (`text` pool head) read facades (sessions + chat UI) ─────────────────
 export const getProvider = (): ChatModelSettings => inst.chat();
 export const useProvider = (): ChatModelSettings => inst.useChat();
 export const resolveMain = (): ChatModelSettings | null => inst.chatOrNull();
-export const saveProviderBlock = (patch: Partial<ChatModelSettings["provider"]>): void => inst.setChatProvider(patch);
-export const saveModelBlock = (patch: Partial<ChatModelSettings["model"]>): void => inst.setChatModel(patch);
-export const saveProvider = (patch: Partial<ChatModelSettings>): void => inst.setChatExtras(patch);
-export const detectModels = (): Promise<{ ok: boolean; count: number; error?: string }> => inst.detectChat();
 
-// ── Registry facades (ModelsSection) ──────────────────────────────────────────
+// ── Registry facades (the Providers section) ──────────────────────────────────
 export const getMediaRegistry = (): MediaRegistry => inst.registry();
 export const useMediaRegistry = (): MediaRegistry => inst.useRegistry();
 export const addProvider = (): string => inst.addProvider();
@@ -489,11 +411,9 @@ export const updateModel = (providerId: string, modelId: string, patch: Partial<
 export const removeModel = (providerId: string, modelId: string): void => inst.removeModel(providerId, modelId);
 export const assignModels = (service: ModelService, refs: ModelAssignment[]): void => inst.assign(service, refs);
 export const slotOptions = (useCase: ModelService, reg: MediaRegistry): Array<{ ref: ModelAssignment; label: string }> => inst.slotOptions(useCase, reg);
-export const detectProviderModels = (ctx: Ctx, id: string): Promise<{ ok: boolean; count: number; error?: string }> => inst.detect(ctx, id);
+export const detectProviderModels = (id: string): Promise<{ ok: boolean; count: number; error?: string }> => inst.detect(id);
 
 // config.llm resolution for any service (used by media tools).
 export function resolveMediaProvider(useCase: MediaService): LLMConfig | null {
   return inst.resolveConfig(useCase);
 }
-
-export type { MediaApiKind };

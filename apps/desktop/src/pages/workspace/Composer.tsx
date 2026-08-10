@@ -59,7 +59,7 @@ export function Composer(props: {
       if (provider.input?.image === false) {
         // The chat model can't SEE images, but a configured image model can still USE one as a
         // generation reference (the ref annotation rides the message) — attach with a note.
-        if (ctx.llm.resolve("imageEdit") ?? ctx.llm.resolve("imageGen")) {
+        if (ctx.llm.resolve("image")) {
           setImages((prev) => [...prev, ...imgs]);
           setAttachNote(t("session.imageRefOnly"));
         } else setAttachNote(t("session.noImageSupport"));
@@ -201,7 +201,7 @@ export function Composer(props: {
           <div className="flex-1" />
           <button
             type="button"
-            onClick={() => navigate("settings/provider")}
+            onClick={() => navigate("settings/providers")}
             title={t("session.changeModel")}
             className="flex items-center gap-1 rounded-md px-2 py-1 text-sm text-neutral-500 hover:bg-neutral-100"
           >

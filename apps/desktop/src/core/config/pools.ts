@@ -9,8 +9,8 @@ import type { ModelService } from "../../llm/types.ts";
 import { createListeners } from "../storage/consumer.ts";
 
 // One model in a service's priority pool. `c` is its max concurrent in-flight calls;
-// `reserve` is the slice kept main-only (>0 only when the model is in BOTH the main and
-// subAgent pools — it sizes main's headroom on a shared model). The model key for
+// `reserve` is the slice kept for foreground only (>0 only on the `text` pool — it sizes chat's
+// headroom over background sub-agent runs sharing the same model). The model key for
 // binding/affinity is `${providerId}:${modelId}`.
 export interface RunnerSlot {
   providerId: string;

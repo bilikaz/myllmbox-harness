@@ -1,14 +1,13 @@
-// Unified Settings registry (ADR-0042) — providers → models → per-service
-// assignments, with `main` alongside the media services. Capability ticks auto-fill
-// an empty slot, stale assignments prune, and an unassigned/endpoint-less slot
-// resolves null (tool inert), never "whatever exists". The legacy media-store
-// migration tests are gone — the unified store has no legacy format to migrate
-// (ADR-0042 carries one shape end to end, no migrations).
+// Unified Settings registry (ADR-0042) — providers → models → per-pool assignments. A model declares
+// output + accepted inputs; that in/out GATES which of the 7 use-case pools it may join (`qualifies`).
+// Pool membership is explicit (assignModels); changing in/out prunes pools a model no longer qualifies
+// for. A fresh install seeds NOTHING (D1) — an unassigned/endpoint-less pool resolves null (tool inert).
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   addModel,
   addProvider,
+  assignModels,
   getMediaRegistry,
   providerCaps,
   removeModel,
@@ -21,13 +20,12 @@ import {
 import { hydrateConsumers } from "../src/core/storage/consumer.ts";
 import { initTestCtx } from "./ctx.ts";
 
-// A media provider with one imageGen-capable model "m1" (the default `main`
-// provider from DEFAULTS stays present and untouched — media slots ignore it).
+// A provider with one image-output model "m1" (fresh install starts empty — nothing seeded).
 function seedProvider(): { pid: string; mid: string } {
   const pid = addProvider();
   updateProvider(pid, { baseUrl: "http://a/v1", name: "A" });
   const mid = addModel(pid, "m1");
-  updateModel(pid, mid, { capabilities: ["imageGen"] });
+  updateModel(pid, mid, { output: "image" });
   return { pid, mid };
 }
 
@@ -36,22 +34,22 @@ const providerById = (id: string) => getMediaRegistry().providers.find((p) => p.
 beforeEach(() => initTestCtx());
 
 describe("providers + models", () => {
-  it("a generate provider keeps exactly one default model with generation-only capabilities", () => {
+  it("switching a provider's dialect preserves its models (no collapse)", () => {
     const pid = addProvider();
     updateProvider(pid, { baseUrl: "http://b/" });
     addModel(pid, "x1");
     addModel(pid, "x2");
 
-    updateProvider(pid, { api: "generate" });
+    updateProvider(pid, { api: "anthropic" });
     const p = providerById(pid)!;
-    expect(p.models).toHaveLength(1);
-    expect(p.models[0].modelId).toBe("");
-    expect(p.detected).toBeUndefined();
+    expect(p.models.map((m) => m.modelId)).toEqual(["x1", "x2"]);
+    expect(p.api).toBe("anthropic");
   });
 
-  it("providerCaps constrains what a model can declare", () => {
-    expect(providerCaps("generate")).toEqual(["imageGen"]);
-    expect(providerCaps("openai")).toHaveLength(8); // 7 media (incl. imageEdit) + subAgent
+  it("providerCaps constrains the output modalities a model can declare (media is OpenAI-only)", () => {
+    expect(providerCaps("openai")).toEqual(["text", "image", "video", "audio"]);
+    expect(providerCaps("anthropic")).toEqual(["text"]);
+    expect(providerCaps("gemini")).toEqual(["text"]);
   });
 
   it("a cosmos wire id arrives pre-marked for the JSON enhancer", () => {
@@ -59,62 +57,113 @@ describe("providers + models", () => {
     const mid = addModel(pid, "nvidia/Cosmos3-T2I");
     expect(providerById(pid)!.models.find((x) => x.id === mid)?.promptStyle).toBe("cosmos-json");
   });
+
+  it("a fresh install adds a text (chat) model that accepts text by default", () => {
+    const pid = addProvider();
+    const mid = addModel(pid, "chat-1");
+    const m = providerById(pid)!.models.find((x) => x.id === mid)!;
+    expect(m.output).toBe("text");
+    expect(m.input?.text).toBe(true);
+  });
 });
 
-describe("assignment + resolution", () => {
-  it("capability tick appends to the pool (ordered), and a lost capability prunes that entry", () => {
+describe("the gate + assignment + resolution", () => {
+  it("qualifies gates which pools a model appears as an option for", () => {
     const { pid, mid } = seedProvider();
-    expect(getMediaRegistry().assignments.imageGen).toEqual([{ providerId: pid, modelId: mid }]);
+    // image output → an `image` option, and nothing else.
+    expect(slotOptions("image", getMediaRegistry()).map((o) => o.ref.modelId)).toEqual([mid]);
+    expect(slotOptions("text", getMediaRegistry())).toEqual([]);
+    expect(slotOptions("video", getMediaRegistry())).toEqual([]);
 
-    const mid2 = addModel(pid, "m2");
-    updateModel(pid, mid2, { capabilities: ["imageGen"] });
-    const pool = getMediaRegistry().assignments.imageGen!;
-    expect(pool).toHaveLength(2);
-    expect(pool[0].modelId).toBe(mid); // first pick keeps its priority position
-
-    updateModel(pid, mid, { capabilities: [] });
-    expect(getMediaRegistry().assignments.imageGen).toEqual([{ providerId: pid, modelId: mid2 }]);
+    // a text model that also accepts image → `text` AND `imageRec`, never `image`.
+    const chat = addModel(pid, "chat");
+    updateModel(pid, chat, { output: "text", input: { text: true, image: true } });
+    expect(slotOptions("text", getMediaRegistry()).map((o) => o.ref.modelId)).toEqual([chat]);
+    expect(slotOptions("imageRec", getMediaRegistry()).map((o) => o.ref.modelId)).toEqual([chat]);
+    expect(slotOptions("image", getMediaRegistry()).map((o) => o.ref.modelId)).toEqual([mid]);
   });
 
-  it("slotOptions lists 'provider : model' for capable models only", () => {
+  it("assignment is explicit + ordered, and losing qualification prunes the pool entry", () => {
     const { pid, mid } = seedProvider();
-    expect(slotOptions("imageGen", getMediaRegistry())).toEqual([{ ref: { providerId: pid, modelId: mid }, label: "A : m1" }]);
-    expect(slotOptions("videoGen", getMediaRegistry())).toEqual([]);
+    const mid2 = addModel(pid, "m2");
+    updateModel(pid, mid2, { output: "image" });
+
+    assignModels("image", [{ providerId: pid, modelId: mid }, { providerId: pid, modelId: mid2 }]);
+    const pool = getMediaRegistry().assignments.image!;
+    expect(pool).toHaveLength(2);
+    expect(pool[0].modelId).toBe(mid); // priority position preserved
+
+    // mid stops outputting image → pruned from the image pool (the gate), mid2 stays.
+    updateModel(pid, mid, { output: "video" });
+    expect(getMediaRegistry().assignments.image).toEqual([{ providerId: pid, modelId: mid2 }]);
+  });
+
+  it("slotOptions lists 'provider : model' for qualifying models only", () => {
+    const { pid, mid } = seedProvider();
+    expect(slotOptions("image", getMediaRegistry())).toEqual([{ ref: { providerId: pid, modelId: mid }, label: "A : m1" }]);
+    expect(slotOptions("video", getMediaRegistry())).toEqual([]);
   });
 
   it("resolution flattens provider + model and goes inert without an endpoint", () => {
     const { pid, mid } = seedProvider();
     updateModel(pid, mid, { maxImageSize: "1024x1024" });
-    expect(resolveMediaProvider("imageGen")).toMatchObject({
+    assignModels("image", [{ providerId: pid, modelId: mid }]);
+    expect(resolveMediaProvider("image")).toMatchObject({
       provider: { name: "A", type: "openai", baseUrl: "http://a/v1" },
       model: { id: "m1", maxImageSize: "1024x1024" },
     });
 
     updateProvider(pid, { baseUrl: "" });
-    expect(resolveMediaProvider("imageGen")).toBeNull();
+    expect(resolveMediaProvider("image")).toBeNull();
   });
 
-  it("a structurally-malformed stored row hydrates to DEFAULTS instead of throwing", async () => {
+  it("a structurally-malformed stored row hydrates to DEFAULTS (empty) instead of throwing", async () => {
     const ctx = initTestCtx();
-    // Legacy/corrupt: services.main is a single object, not the ordered array resolvePools maps over.
+    // Legacy/corrupt: services.text is a single object, not the ordered array resolvePools maps over.
     await ctx.storage.repos().settings.put({
       key: "myllmbox-harness:settings",
-      value: JSON.stringify({ providers: [], services: { main: { providerId: "x", modelId: "y" } } }),
+      value: JSON.stringify({ providers: [], services: { text: { providerId: "x", modelId: "y" } } }),
     });
     await expect(hydrateConsumers()).resolves.toBeDefined();
-    expect(getMediaRegistry().providers.some((p) => p.id === "default-provider")).toBe(true);
-    expect(getMediaRegistry().assignments.main).toEqual([{ providerId: "default-provider", modelId: "default-main" }]);
+    expect(getMediaRegistry().providers).toEqual([]);
+    expect(getMediaRegistry().assignments).toEqual({});
   });
 
   it("removing a model or provider prunes its assignments", () => {
     const { pid, mid } = seedProvider();
+    assignModels("image", [{ providerId: pid, modelId: mid }]);
     removeModel(pid, mid);
-    expect(getMediaRegistry().assignments.imageGen).toBeUndefined();
+    expect(getMediaRegistry().assignments.image).toBeUndefined();
 
     const mid2 = addModel(pid, "m2");
-    updateModel(pid, mid2, { capabilities: ["imageGen"] });
+    updateModel(pid, mid2, { output: "image" });
+    assignModels("image", [{ providerId: pid, modelId: mid2 }]);
     removeProvider(pid);
     expect(providerById(pid)).toBeUndefined();
-    expect(resolveMediaProvider("imageGen")).toBeNull();
+    expect(resolveMediaProvider("image")).toBeNull();
+  });
+});
+
+describe("context length + dialect reconcile", () => {
+  // D9/A3 canary: the exact regression the merge introduced — a detected window must ride onto a
+  // freshly-added model, not get dropped on the Detect→Add flow.
+  it("addModel carries the provider's detected context length onto a new model", () => {
+    const pid = addProvider();
+    updateProvider(pid, { baseUrl: "http://a/v1", modelLimits: { "chat-1": 65536 } });
+    const mid = addModel(pid, "chat-1");
+    expect(providerById(pid)!.models.find((m) => m.id === mid)!.contextLength).toBe(65536);
+    // a wire id with no reported limit stays unset — the manual Context length field is the fallback.
+    const mid2 = addModel(pid, "chat-2");
+    expect(providerById(pid)!.models.find((m) => m.id === mid2)!.contextLength).toBeUndefined();
+  });
+
+  it("switching a provider's dialect clamps a model's output to the new caps", () => {
+    const pid = addProvider();
+    updateProvider(pid, { baseUrl: "http://a/v1" });
+    const mid = addModel(pid, "img-1");
+    updateModel(pid, mid, { output: "image" }); // legal on openai
+    expect(providerById(pid)!.models.find((m) => m.id === mid)!.output).toBe("image");
+    updateProvider(pid, { api: "anthropic" }); // anthropic outputs text only → clamp
+    expect(providerById(pid)!.models.find((m) => m.id === mid)!.output).toBe("text");
   });
 });

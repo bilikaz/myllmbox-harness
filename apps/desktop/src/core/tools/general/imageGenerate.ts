@@ -5,10 +5,10 @@ import { runImageGeneration } from "../helpers/imageGeneration.ts";
 import type { PreparedSave } from "../helpers/imageSave.ts";
 import type { ToolRunCtx } from "../types.ts";
 
-// ImageGenerate: prompt → imageGen slot model → image as a data-URL riding the message (no files, no workspace; the model gets it back to inspect).
+// ImageGenerate: prompt → the `image` pool model → image as a data-URL riding the message (no files, no workspace; the model gets it back to inspect).
 export class ImageGenerate extends BaseGeneralTool {
   override canRun(): boolean {
-    return this.llm.resolve("imageGen") != null;
+    return this.llm.resolve("image") != null;
   }
 
   override single(): boolean {
@@ -23,7 +23,7 @@ export class ImageGenerate extends BaseGeneralTool {
         description:
           "Generate an image from a text prompt using the configured image model. The image is returned " +
           "to you so you can inspect and validate it, with an img-N reference alias you can reuse later (e.g. in " +
-          "ImageCompose references). When a workspace is open the image is also saved into it " +
+          "ImageEdit references). When a workspace is open the image is also saved into it " +
           "(under `name`), and the result tells you the saved path. Only " +
           "one ImageGenerate runs per turn — generate one image at a time.",
         parameters: {

@@ -65,27 +65,26 @@ export interface StreamUsage {
   thinkingTokens?: number;
 }
 
-// The media services config covers — the single runtime list; MediaService derives from it.
-export const MEDIA_SERVICES = ["imageGen", "imageEdit", "videoGen", "imageRec", "videoRec", "audioGen", "audioRec"] as const;
+// The media services config covers — the single runtime list; MediaService derives from it. These are
+// the non-text use-case pools; gen-vs-edit and t2v/i2v/v2v are NOT pools (endpoint/param choices driven
+// by the inputs present at call time), and recognition is text-output over a media input.
+export const MEDIA_SERVICES = ["image", "video", "audio", "imageRec", "videoRec", "audioRec"] as const;
 export type MediaService = (typeof MEDIA_SERVICES)[number];
-// `main` (foreground chat) and `subAgent` (child runs) are the two text-runner roles the
-// concurrency runner pools over; both resolve through the text provider path.
-export type ModelService = "main" | "subAgent" | MediaService;
+// The 7 use-case pools. `text` is the chat pool — foreground chat AND background sub-agent runs share it
+// (the concurrency runner reserves foreground capacity over background runs); it resolves through the
+// text provider path.
+export type ModelService = "text" | MediaService;
 
 export type Modality = "text" | "image" | "video" | "audio";
 export const SERVICE_MODALITY: Record<ModelService, Modality> = {
-  main: "text",
-  subAgent: "text",
+  text: "text",
   imageRec: "text",
   videoRec: "text",
   audioRec: "text",
-  imageGen: "image",
-  imageEdit: "image",
-  videoGen: "video",
-  audioGen: "audio",
+  image: "image",
+  video: "video",
+  audio: "audio",
 };
-
-export type MediaApiKind = "openai" | "generate";
 
 export interface ToolSpec {
   type: "function";
@@ -105,7 +104,9 @@ export type StreamEvent =
   | { type: "error"; message: string; kind: ErrorKind }
   | { type: "done" };
 
-export type ProviderKind = TextProviderKind | "generate";
+// A provider is one of the text dialects; media generation rides the OpenAI Images API, so the
+// image/video providers live under the `openai` type too — there is no separate media dialect.
+export type ProviderKind = TextProviderKind;
 
 export interface ModelInfo {
   id: string;

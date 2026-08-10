@@ -18,7 +18,7 @@ export class VideoLoad extends BaseWorkspaceTool {
   // Loading a video for the model to watch only makes sense if it accepts video — required to be
   // declared on (ADR-0018). Withheld from the schema + refused per call.
   override canRun(): boolean {
-    return this.llm.resolve("main")?.input?.video === true;
+    return this.llm.resolve("text")?.input?.video === true;
   }
 
   get schema(): ToolSpec {
