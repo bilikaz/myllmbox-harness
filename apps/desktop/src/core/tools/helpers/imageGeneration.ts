@@ -4,6 +4,7 @@
 // keep what is genuinely theirs: argument validation, reference resolution, naming/saving, result text.
 
 import { imageHandler, type LLMClient } from "../../../llm/index.ts";
+import type { LLMConfig } from "../../config/llm.ts";
 import { errorMessage } from "../../../lib/errors.ts";
 import { getAppConfig } from "../../config/index.ts";
 import { cosmosImagePrompt } from "./upsampler/cosmos.ts";
@@ -14,6 +15,7 @@ export interface ImageGenRequest {
   inputs?: { b64: string; mime: string }[]; // resolved reference images — present → the edit path
   aspect?: unknown; // an ASPECTS key; default "1:1"
   quality?: unknown; // low | good | super; default "good"
+  target?: LLMConfig; // explicit model override (a generation session's pinned pick); else the pool head
   signal?: AbortSignal;
 }
 
@@ -24,7 +26,8 @@ export type ImageGenOutcome = { b64: string; mime: string } | { error: string; f
 export async function runImageGeneration(llm: LLMClient, req: ImageGenRequest): Promise<ImageGenOutcome> {
   // ONE `image` pool: references present → the image provider routes to the edit endpoint (/images/edits);
   // absent → generation (/images/generations). The tool doesn't pick the endpoint — the provider does.
-  const slot = llm.resolve("image");
+  // `target` (a pinned pick) overrides the pool head, for both the size math and the call.
+  const slot = req.target ?? llm.resolve("image");
   if (!slot) return { error: `no model is assigned to the image use case (Settings → Providers).` };
   const isEdit = !!req.inputs?.length;
 
@@ -41,6 +44,7 @@ export async function runImageGeneration(llm: LLMClient, req: ImageGenRequest): 
   try {
     const { b64, mime } = await llm.call({
       service: "image",
+      target: req.target,
       messages: [{ role: "user", content: prompt }],
       signal: req.signal,
       handler: imageHandler(),

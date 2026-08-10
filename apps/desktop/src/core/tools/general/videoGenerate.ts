@@ -1,4 +1,4 @@
-import { type Video, type ToolResult, type ToolSpec } from "../types.ts";
+import { type Video, type ToolResult, type ToolSpec, type ToolRunCtx } from "../types.ts";
 import { BaseGeneralTool } from "./base.ts";
 import { mimeToExt } from "../../../lib/dataUrl.ts";
 import { videoHandler } from "../../../llm/index.ts";
@@ -47,10 +47,11 @@ export class VideoGenerate extends BaseGeneralTool {
     };
   }
 
-  async run(args: Record<string, unknown>, _cwd?: string, signal?: AbortSignal): Promise<ToolResult> {
+  async run(args: Record<string, unknown>, _cwd?: string, signal?: AbortSignal, ctx?: ToolRunCtx): Promise<ToolResult> {
     const prompt = String(args.prompt ?? "").trim();
     if (!prompt) return { ok: false, output: `VideoGenerate rejected: missing required "prompt".` };
-    const media = this.requireSlot("video", "VideoGenerate");
+    // A pinned pick (`ctx.target`) overrides the pool head — for the size math and the call alike.
+    const media = ctx?.target ?? this.requireSlot("video", "VideoGenerate");
     if ("ok" in media) return media;
     const cfg = getAppConfig().videoGen;
 
@@ -78,6 +79,7 @@ export class VideoGenerate extends BaseGeneralTool {
     try {
       const { b64, mime } = await this.llm.call({
         service: "video",
+        target: ctx?.target,
         messages: [{ role: "user", content: finalPrompt }],
         signal: signal,
         handler: videoHandler(),

@@ -1,6 +1,6 @@
-// Containers — the unified chat / local-workspace entity (the sidebar blocks). Replaces the old
-// Workspace + the magic `workspaceId: null` "Chat" group: a chat is just a container of type
-// "chat", linked to no folder. `type` is the WORKSPACE kind, independent of storage.
+// Containers — the sidebar blocks. Two families: TEXT kinds — `chat` (no folder) and `local` (a
+// workspace folder, fs tools) — both talk to the text LLM; and GENERATION kinds — `image` / `video`
+// — whose composer sends to that media pool instead of the LLM (task 3). `type` carries the target.
 
 import { useSyncExternalStore } from "react";
 
@@ -8,10 +8,18 @@ import { newId } from "./ids.ts";
 import { createListeners } from "./storage/consumer.ts";
 import type { StorageEngine } from "./storage/engine.ts";
 import type { Ctx } from "./ctx.ts";
+import type { ModelService } from "../llm/types.ts";
 import { rootLog } from "../lib/logger/index.ts";
 import { errorMessage } from "../lib/errors.ts";
 
-export type ContainerType = "chat" | "local";
+export type ContainerType = "chat" | "local" | "image" | "video";
+
+// The use-case pool a container's sessions target: text kinds → the chat model; generation kinds →
+// their media pool. Total over ContainerType, and undefined → text (never mis-route before a container
+// resolves). `image`/`video` are the only non-text targets task 3 ships; audio is the natural next one.
+export function containerTarget(type: ContainerType | undefined): ModelService {
+  return type === "image" ? "image" : type === "video" ? "video" : "text";
+}
 
 export interface Container {
   id: string;

@@ -30,7 +30,11 @@
     "newChat": "New chat",
     "waitingSlot": "Waiting for a free slot…",
     "streaming": "Generating a response…",
-    "unread": "Unread"
+    "unread": "Unread",
+    "images": "Images",
+    "videos": "Videos",
+    "newImages": "Images",
+    "newVideos": "Videos"
   },
   "container": {
     "title": "Workspace settings",
@@ -228,7 +232,9 @@
     "compactedDivider": "Compacted — messages above are kept here but no longer sent to the model",
     "compactedSummary": "Summary sent to the model",
     "healing": "Self-healing (attempt {{round}})…",
-    "waitingInput": "Waiting for your input…"
+    "waitingInput": "Waiting for your input…",
+    "imageRefEdit": "Attached as an edit reference — the image model uses it as the base.",
+    "noGenRef": "Video generation takes no reference — describe the video in text."
   },
   "progress": {
     "progress": "Progress",
@@ -304,11 +310,41 @@
     "close": "Close",
     "closeEsc": "Close (Esc)",
     "saveImage": "Save image",
-    "saveVideo": "Save video"
+    "saveVideo": "Save video",
+    "sendToChat": "Send to chat"
   },
   "gallery": {
     "hint": "Every page layout the gallery composer supports — tell the agent the handle (e.g. \"use 5-3\"). Click a preview to enlarge.",
     "groupTitle": "{{count}} images",
     "unavailable": "Layout previews are unavailable here (desktop app only)."
+  },
+  "gen": {
+    "aspect": "Aspect ratio",
+    "quality": "Quality",
+    "quality_low": "Low",
+    "quality_good": "Good",
+    "quality_super": "Super",
+    "duration": "Duration (seconds)",
+    "seconds": "s",
+    "configureModel": "Configure a model",
+    "placeholder_image": "Describe the image to generate…",
+    "placeholder_video": "Describe the video to generate…",
+    "generating_image": "Generating image… {{secs}}s",
+    "generating_video": "Generating video… {{secs}}s (can take several minutes)"
+  },
+  "capabilities": {
+    "title": "Model capabilities",
+    "noModel": "No model configured — add one in Settings → Providers.",
+    "output": "Output",
+    "inputs": "Accepts",
+    "none": "text only",
+    "hint_image": "Aspect and quality apply to each image. Attach an image to edit it.",
+    "hint_video": "Aspect, quality, and duration apply to each clip."
+  },
+  "modality": {
+    "text": "Text",
+    "image": "Image",
+    "video": "Video",
+    "audio": "Audio"
   }
 }

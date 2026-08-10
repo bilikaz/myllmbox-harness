@@ -2,7 +2,7 @@
 // (ToolSpec, ToolCallRequest, Image, Video) are owned by the llm layer and re-exported here.
 
 import type { Config } from "../config/index.ts";
-import type { Image, Video, ToolSpec, ToolCallRequest } from "../../llm/types.ts";
+import type { Image, Video, ToolSpec, ToolCallRequest, LLMConfig } from "../../llm/types.ts";
 export type { Image, Video, ToolSpec, ToolCallRequest } from "../../llm/types.ts";
 
 export interface ToolResult {
@@ -20,6 +20,7 @@ export interface ToolRunCtx {
   mediaRefs?: Record<string, { url: string; mime?: string; name?: string }>;
   sessionId?: string;
   meta?: Record<string, unknown>; // the calling session's meta, engine-stamped — tools look for the keys they recognize
+  target?: LLMConfig; // an explicit model override (a generation session's pinned pick); media tools use it over the pool head
 }
 
 // What crosses the bridge to the main runner alongside the call: the config snapshot (functions/clients can't

@@ -238,6 +238,18 @@ export function patchMeta(sid: string, patch: Record<string, unknown>): void {
   persistSessionMeta(sid);
 }
 
+// Generation sessions (task 3): the inline composer picker pins a model, and the knobs bar sets the
+// per-session aspect/quality/duration. Both patch meta AND notify so the composer re-renders (plain
+// patchMeta is silent — used for churn the UI doesn't watch).
+export function setPinnedModel(sid: string, ref: SessionRuntime["pinnedModel"]): void {
+  patchMeta(sid, { pinnedModel: ref });
+  notify();
+}
+export function setGen(sid: string, gen: SessionRuntime["gen"]): void {
+  patchMeta(sid, { gen });
+  notify();
+}
+
 // The graph-run milestone (see SessionRuntime.graphRun) — written by the graph engine at every node
 // boundary, cleared when the run ends; a relaunch revives the run parked here.
 export function setGraphRun(sid: string, run: SessionRuntime["graphRun"]): void {
@@ -497,6 +509,47 @@ export function pushTurn(sid: string, userText: string, images?: Image[], files?
   sessions = sessions.map((s) =>
     s.id === sid ? { ...s, messages: [...s.messages, userMsg, assistantMsg] } : s,
   );
+  notify();
+}
+
+// A generation turn's RESULT (task 3): fill the assistant placeholder pushTurn appended with the produced
+// media, stamp its img-N/vid-N aliases, and commit — reusing the incremental-commit persistence. No LLM
+// loop ran; the "turn" is the user prompt + this media result.
+export function completeGeneration(sid: string, result: { images?: Image[]; videos?: Video[] }): void {
+  stampMediaRefs(sid, result.images, result.videos);
+  sessions = sessions.map((s) => {
+    if (s.id !== sid) return s;
+    const messages = s.messages.slice();
+    const i = messages.length - 1; // the assistant placeholder
+    messages[i] = { ...messages[i], images: result.images, videos: result.videos };
+    return { ...s, messages };
+  });
+  notify();
+  commitMessages(sid);
+}
+
+// A generation that failed or was aborted: write the reason into the placeholder + flag the error (drives
+// the roster status), then commit so the failed turn persists alongside the user prompt.
+export function failGeneration(sid: string, message: string): void {
+  sessions = sessions.map((s) => {
+    if (s.id !== sid) return s;
+    const messages = s.messages.slice();
+    const i = messages.length - 1;
+    messages[i] = { ...messages[i], text: message };
+    return { ...s, meta: { ...s.meta, errorKind: "other" }, messages };
+  });
+  notify();
+  commitMessages(sid);
+}
+
+// A user Stop on a generation (task 3): the tool was aborted, not failed — drop the trailing blank
+// assistant placeholder so the turn is neither a mangled error nor a stray empty bubble. The user prompt
+// (committed at turn start) stays. No commit needed: the blank placeholder was never persisted.
+export function dropGenerationPlaceholder(sid: string): void {
+  const s = getSession(sid);
+  const last = s?.messages.at(-1);
+  if (!s || !last || last.role !== "assistant" || last.text || last.images?.length || last.videos?.length) return;
+  sessions = sessions.map((x) => (x.id === sid ? { ...x, messages: x.messages.slice(0, -1) } : x));
   notify();
 }
 

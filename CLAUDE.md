@@ -39,8 +39,9 @@ Read the docs: the ARCHITECTURE.md hub, then the
 [docs/architecture/](docs/architecture/) area doc for the area you're touching,
 the conventions index ([docs/conventions/README.md](docs/conventions/README.md)),
 and any ADRs near your change ([docs/adr/README.md](docs/adr/README.md)).
-Subagents get the same instruction — point them at the specific area doc and
-files relevant to their task.
+Read-only exploration subagents get the same instruction — point them at the specific
+area doc and files relevant to their task. (They map and report; they never write the
+implementation — see "While working".)
 
 ## Development iterations — `docs/tasks/task<n>/`
 
@@ -145,6 +146,19 @@ Build aligned with what is already settled: Accepted ADRs and the conventions as
 written are binding. Don't invent a new pattern where a documented one fits, and
 don't update the docs mid-session — note discoveries and deviations as you go and
 carry them to the end-of-session step.
+
+### Implementation is the holder's job — never delegated to a sub-agent
+
+The agent holding the session **writes the implementation itself.** Do **not** hand
+coding to a spawned sub-agent. A sub-agent starts from the task docs alone with **none**
+of the conversation's settled context — the hundred small decisions, corrections, names,
+and trade-offs argued out over the session — so it drifts, half-wires, and leaves
+broken/incomplete work that costs more to review-and-repair than it would have to build
+directly (observed repeatedly: context-less builds that miss whole files and don't even
+typecheck). Sub-agents are strictly for **read-only exploration** (mapping code, broad
+searches) whose *conclusion* returns to the holder, and for the **independent drift
+review** (where a fresh reader with no history is the whole point). For writing code:
+the holder does it, because the holder is the only one who knows what was settled.
 
 ### Verification cadence
 

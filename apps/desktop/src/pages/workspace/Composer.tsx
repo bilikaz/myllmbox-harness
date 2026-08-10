@@ -2,15 +2,23 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from
 import { useTranslation } from "react-i18next";
 import { ArrowUp, ChevronDown, Plus, Square } from "lucide-react";
 
-import { useProvider } from "../../core/settings.ts";
+import { useProvider, useMediaRegistry, slotOptions } from "../../core/settings.ts";
 import { effectiveImageMaxDim, getAppConfig } from "../../core/config/index.ts";
 import { clipboardFiles, readAttachments } from "../../lib/attachments.ts";
 import { b64ToBytes, parseDataUrl } from "../../lib/dataUrl.ts";
 import { useCtx } from "../../renderer/ctx.tsx";
 import { navigate } from "../../lib/router.ts";
 import { AttachmentList } from "../../components/AttachmentList.tsx";
+import { useActiveSession, setPinnedModel, setGen } from "../../core/sessions/index.ts";
+import { consumePendingAttachment, usePendingAttachment } from "../../core/ui.ts";
+import type { ModelService } from "../../llm/types.ts";
 import type { FileAttachment, Image, Video } from "../../lib/types.ts";
 import type { Attachments } from "../../core/sessions/index.ts";
+
+// Generation knob choices — mirror the ImageGenerate/VideoGenerate arg enums (kept inline: a UI concern,
+// the tool schemas are the source of truth for what the model may pass).
+const ASPECT_OPTS = ["1:1", "16:9", "9:16", "4:3", "3:4"] as const;
+const QUALITY_OPTS = ["low", "good", "super"] as const;
 
 // Message composer shared by chat and agent runs — owns its input state; the parent owns what submit means.
 export function Composer(props: {
@@ -20,24 +28,60 @@ export function Composer(props: {
   streaming?: boolean;
   lock?: boolean; // hard-lock the input itself (a running sub-agent: stop it to guide it)
   lockNote?: string; // placeholder shown while locked
+  // Generation sessions (task 3): the container's media pool. Unset/"text" is a normal chat composer;
+  // "image"/"video" turn it into a generation composer (inline model picker, knob bar, ref-only attach).
+  target?: ModelService;
+  // The main chat composer sets this so it (and only it, avoiding a race with the child/agent/browser
+  // composers) picks up a Send-to-chat attachment. See core/ui.ts sendMediaToChat.
+  consumesPending?: boolean;
   onStop?: () => void;
   onSubmit: (text: string, atts: Attachments) => void;
 }) {
   const { t } = useTranslation();
   const provider = useProvider();
   const ctx = useCtx();
+  const session = useActiveSession();
+  const registry = useMediaRegistry();
   const [input, setInput] = useState(props.seed ?? "");
   const [images, setImages] = useState<Image[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [files, setFiles] = useState<FileAttachment[]>([]);
   const [attachNote, setAttachNote] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Generation mode: derived from the container's pool. `image` sessions accept an image attachment as
+  // an ImageEdit reference; `video` sessions are text→video only in v1 (no reference param). The picker
+  // pins a model per session; the knob bar sets aspect/quality/(duration) per session.
+  const gen = props.target === "image" || props.target === "video";
+  const pool: ModelService = props.target ?? "text";
+  const genOptions = gen ? slotOptions(pool, registry) : [];
+  const pinned = session.meta.pinnedModel;
+  const pinnedRef =
+    pinned && genOptions.some((o) => o.ref.providerId === pinned.providerId && o.ref.modelId === pinned.modelId)
+      ? pinned
+      : genOptions[0]?.ref;
+  const pinnedLabel = genOptions.find((o) => o.ref.providerId === pinnedRef?.providerId && o.ref.modelId === pinnedRef?.modelId)?.label;
+  // Attach = ImageEdit reference. Gate on the resolved model's declared input (task 2's capability
+  // model), NOT the pool: a pure text→image model pinned to an image session can't take a reference, so
+  // the composer must not offer one. Video takes no reference in v1.
+  const genModel = gen && pinnedRef ? registry.providers.find((p) => p.id === pinnedRef.providerId)?.models.find((m) => m.id === pinnedRef.modelId) : undefined;
+  const canRef = pool === "image" && !!genModel?.input?.image;
+  const cfg = getAppConfig();
+  const knobs = session.meta.gen ?? {};
+  const aspect = knobs.aspect ?? (pool === "video" ? "16:9" : "1:1");
+  const quality = knobs.quality ?? "good";
+  const duration = knobs.duration ?? cfg.videoGen.defaultDurationS;
+  const patchGen = (p: NonNullable<typeof session.meta.gen>): void => setGen(session.id, { ...knobs, ...p });
 
   // A busy session QUEUES a text message (the pending inbox — delivered at the next cycle
   // boundary); attachments can't ride a pending record yet, so they still wait for idle.
   const hasAtts = images.length > 0 || videos.length > 0 || files.length > 0;
-  const canSend = (input.trim().length > 0 || hasAtts) && !(props.streaming && hasAtts) && !props.disabled;
+  const canSend = gen
+    ? // Generation needs a prompt + a configured pool model, and can't overlap a running generation.
+      input.trim().length > 0 && genOptions.length > 0 && !props.streaming && !props.disabled
+    : (input.trim().length > 0 || hasAtts) && !(props.streaming && hasAtts) && !props.disabled;
 
   useLayoutEffect(() => {
     const el = inputRef.current;
@@ -56,7 +100,14 @@ export function Composer(props: {
       videoMaxBytes: caps.videoMaxBytes,
     });
     if (imgs.length) {
-      if (provider.input?.image === false) {
+      if (gen) {
+        // Generation composer: an image is an ImageEdit reference — only when the pinned image model
+        // actually accepts image input. Video (and text→image models) take no reference.
+        if (canRef) {
+          setImages((prev) => [...prev, ...imgs]);
+          setAttachNote(t("session.imageRefEdit"));
+        } else setAttachNote(t("session.noGenRef"));
+      } else if (provider.input?.image === false) {
         // The chat model can't SEE images, but a configured image model can still USE one as a
         // generation reference (the ref annotation rides the message) — attach with a note.
         if (ctx.llm.resolve("image")) {
@@ -69,13 +120,14 @@ export function Composer(props: {
       }
     }
     if (vids.length) {
-      if (!provider.input?.video) setAttachNote(t("session.noVideoSupport"));
+      if (gen) setAttachNote(t("session.noGenRef"));
+      else if (!provider.input?.video) setAttachNote(t("session.noVideoSupport"));
       else {
         setVideos((prev) => [...prev, ...vids]);
         setAttachNote("");
       }
     }
-    if (fs.length) setFiles((prev) => [...prev, ...fs]);
+    if (fs.length && !gen) setFiles((prev) => [...prev, ...fs]);
     // Notes last so the accept paths can't clear them; skip outranks resize when both apply.
     if (resized.length) setAttachNote(t("session.attachResized", { names: resized.join(", "), max: maxDim }));
     if (skipped.length) setAttachNote(t("session.attachTooBig", { names: skipped.join(", ") }));
@@ -132,6 +184,19 @@ export function Composer(props: {
     return () => document.removeEventListener("paste", h);
   }, []);
 
+  // Send-to-chat: only the main chat composer consumes the pending attachment (generation composers and
+  // sub-agent/browser composers don't), so a routed image/video lands exactly once, in the chat.
+  const pendingAtt = usePendingAttachment();
+  useEffect(() => {
+    if (!props.consumesPending || gen || !pendingAtt) return;
+    const p = consumePendingAttachment();
+    if (!p) return;
+    const media = { url: p.url, name: p.name, mime: p.mime };
+    if (p.kind === "image") setImages((prev) => [...prev, media]);
+    else setVideos((prev) => [...prev, media]);
+    inputRef.current?.focus();
+  }, [pendingAtt, props.consumesPending, gen]);
+
   function submit() {
     if (!canSend) return;
     const text = input.trim();
@@ -185,29 +250,122 @@ export function Composer(props: {
           disabled={props.lock}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder={props.lock ? props.lockNote ?? t("session.placeholder") : t("session.placeholder")}
+          placeholder={props.lock ? props.lockNote ?? t("session.placeholder") : gen ? t(`gen.placeholder_${pool}`) : t("session.placeholder")}
           className="max-h-24 w-full resize-none overflow-y-auto px-2 py-1 text-sm outline-none placeholder:text-neutral-400 disabled:cursor-not-allowed disabled:bg-transparent"
         />
         <input ref={fileRef} type="file" multiple hidden onChange={onPickFiles} />
         <div className="mt-2 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            title={t("session.attach")}
-            className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100"
-          >
-            <Plus size={18} />
-          </button>
+          {/* Attach: chat, or an image-edit reference when the pinned image model accepts image input. */}
+          {(!gen || canRef) && (
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              title={t("session.attach")}
+              className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100"
+            >
+              <Plus size={18} />
+            </button>
+          )}
+          {/* Knob bar (generation only): aspect + quality, plus duration for video. Persisted per session. */}
+          {gen && (
+            <div className="flex items-center gap-1.5 text-xs text-neutral-500">
+              <select
+                value={aspect}
+                onChange={(e) => patchGen({ aspect: e.target.value })}
+                title={t("gen.aspect")}
+                className="rounded-md border border-neutral-200 bg-white px-1.5 py-1 outline-none hover:bg-neutral-50"
+              >
+                {ASPECT_OPTS.map((a) => (
+                  <option key={a} value={a}>
+                    {a}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={quality}
+                onChange={(e) => patchGen({ quality: e.target.value })}
+                title={t("gen.quality")}
+                className="rounded-md border border-neutral-200 bg-white px-1.5 py-1 outline-none hover:bg-neutral-50"
+              >
+                {QUALITY_OPTS.map((q) => (
+                  <option key={q} value={q}>
+                    {t(`gen.quality_${q}`)}
+                  </option>
+                ))}
+              </select>
+              {pool === "video" && (
+                <label className="flex items-center gap-1" title={t("gen.duration")}>
+                  <input
+                    type="number"
+                    min={1}
+                    max={cfg.videoGen.maxDurationS}
+                    value={duration}
+                    onChange={(e) => patchGen({ duration: Math.max(1, Math.min(cfg.videoGen.maxDurationS, Number(e.target.value) || 1)) })}
+                    className="w-12 rounded-md border border-neutral-200 bg-white px-1.5 py-1 outline-none hover:bg-neutral-50"
+                  />
+                  {t("gen.seconds")}
+                </label>
+              )}
+            </div>
+          )}
           <div className="flex-1" />
-          <button
-            type="button"
-            onClick={() => navigate("settings/providers")}
-            title={t("session.changeModel")}
-            className="flex items-center gap-1 rounded-md px-2 py-1 text-sm text-neutral-500 hover:bg-neutral-100"
-          >
-            {props.modelLabel || provider.model.id || t("session.selectModel")}
-            <ChevronDown size={14} />
-          </button>
+          {gen ? (
+            genOptions.length === 0 ? (
+              <button
+                type="button"
+                onClick={() => navigate("settings/providers")}
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-sm text-amber-600 hover:bg-neutral-100"
+              >
+                {t("gen.configureModel")}
+                <ChevronDown size={14} />
+              </button>
+            ) : (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setPickerOpen((o) => !o)}
+                  title={t("session.changeModel")}
+                  className="flex items-center gap-1 rounded-md px-2 py-1 text-sm text-neutral-500 hover:bg-neutral-100"
+                >
+                  {pinnedLabel || t("session.selectModel")}
+                  <ChevronDown size={14} />
+                </button>
+                {pickerOpen && (
+                  <>
+                    <button type="button" className="fixed inset-0 z-10 cursor-default" onClick={() => setPickerOpen(false)} aria-hidden />
+                    <div className="absolute bottom-full right-0 z-20 mb-1 max-h-64 w-64 overflow-y-auto rounded-lg border border-neutral-200 bg-white py-1 shadow-lg">
+                      {genOptions.map((o) => {
+                        const active = o.ref.providerId === pinnedRef?.providerId && o.ref.modelId === pinnedRef?.modelId;
+                        return (
+                          <button
+                            key={`${o.ref.providerId}:${o.ref.modelId}`}
+                            type="button"
+                            onClick={() => {
+                              setPinnedModel(session.id, o.ref);
+                              setPickerOpen(false);
+                            }}
+                            className={`block w-full truncate px-3 py-1.5 text-left text-sm hover:bg-neutral-100 ${active ? "text-neutral-900" : "text-neutral-600"}`}
+                          >
+                            {o.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            )
+          ) : (
+            <button
+              type="button"
+              onClick={() => navigate("settings/providers")}
+              title={t("session.changeModel")}
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-sm text-neutral-500 hover:bg-neutral-100"
+            >
+              {props.modelLabel || provider.model.id || t("session.selectModel")}
+              <ChevronDown size={14} />
+            </button>
+          )}
           {props.streaming ? (
             <button
               type="button"

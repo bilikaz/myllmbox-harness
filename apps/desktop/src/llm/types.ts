@@ -47,6 +47,10 @@ export interface ToolCallRequest {
   // the store, so the session state they may recognize rides on the call.
   sessionId?: string;
   meta?: Record<string, unknown>;
+  // An explicit model override for this call, non-model + caller-filled (same lane as mediaRefs/meta).
+  // A human generation session fills it from its pinned pick so the tool uses THIS model instead of the
+  // pool head; the agent never sets it (its media tools resolve the pool head). Plain data — crosses IPC.
+  target?: LLMConfig;
 }
 
 export interface ChatMessage {

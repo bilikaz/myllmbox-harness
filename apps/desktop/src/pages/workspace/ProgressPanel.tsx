@@ -4,16 +4,21 @@ import { ChevronRight, RefreshCw, Shrink } from "lucide-react";
 
 import { contextLimit, useActiveSession, useCompacting } from "../../core/sessions/index.ts";
 import { useCtx } from "../../renderer/ctx.tsx";
-import { useProvider } from "../../core/settings.ts";
+import { useProvider, useMediaRegistry, slotOptions } from "../../core/settings.ts";
+import { containerTarget, getContainer } from "../../core/containers.ts";
+import type { ModelService } from "../../llm/types.ts";
 import { fmtTokens } from "../../lib/format.ts";
 import { cn } from "../../lib/cn.ts";
 import { ConfirmActions } from "../../components/ConfirmActions.tsx";
 import { Modal } from "../../components/Modal.tsx";
 
-// Right-panel contribution: the active session's context window (reads stores, no props).
+// Right-panel contribution: the active session's context window — or, for generation sessions, the
+// capabilities of the pinned media model (a context meter is meaningless when the model isn't the LLM).
 export function ProgressPanel() {
   const session = useActiveSession();
   const provider = useProvider();
+  const pool = containerTarget(getContainer(session.containerId)?.type);
+  if (pool !== "text") return <CapabilitiesPanel pool={pool} />;
   return (
     <ContextWindow
       used={session.meta.usedTokens ?? 0}
@@ -21,6 +26,45 @@ export function ProgressPanel() {
       limit={contextLimit(provider)}
       sid={session.id}
     />
+  );
+}
+
+// What the pinned (or pool-head) media model can do: output modality, accepted inputs, and the knobs
+// the composer exposes. Replaces the token meter for image/video sessions.
+function CapabilitiesPanel({ pool }: { pool: ModelService }) {
+  const { t } = useTranslation();
+  const session = useActiveSession();
+  const registry = useMediaRegistry();
+  const options = slotOptions(pool, registry);
+  const pinned = session.meta.pinnedModel;
+  const ref = pinned && options.some((o) => o.ref.providerId === pinned.providerId && o.ref.modelId === pinned.modelId) ? pinned : options[0]?.ref;
+  const model = ref ? registry.providers.find((p) => p.id === ref.providerId)?.models.find((m) => m.id === ref.modelId) : undefined;
+  const label = options.find((o) => o.ref.providerId === ref?.providerId && o.ref.modelId === ref?.modelId)?.label;
+  if (!model) {
+    return (
+      <Card title={t("capabilities.title")}>
+        <p className="text-sm text-neutral-500">{t("capabilities.noModel")}</p>
+      </Card>
+    );
+  }
+  const inputs = (["text", "image", "video", "audio"] as const).filter((k) => model.input?.[k]);
+  return (
+    <Card title={t("capabilities.title")}>
+      <p className="truncate text-sm font-medium text-neutral-800">{label}</p>
+      <dl className="mt-3 space-y-2 text-xs">
+        <div className="flex items-center justify-between">
+          <dt className="text-neutral-500">{t("capabilities.output")}</dt>
+          <dd className="font-medium text-neutral-700">{t(`modality.${model.output}`)}</dd>
+        </div>
+        <div className="flex items-start justify-between gap-2">
+          <dt className="text-neutral-500">{t("capabilities.inputs")}</dt>
+          <dd className="text-right font-medium text-neutral-700">
+            {inputs.length ? inputs.map((k) => t(`modality.${k}`)).join(", ") : t("capabilities.none")}
+          </dd>
+        </div>
+      </dl>
+      <p className="mt-3 text-[11px] text-neutral-400">{t(`capabilities.hint_${pool}`)}</p>
+    </Card>
   );
 }
 

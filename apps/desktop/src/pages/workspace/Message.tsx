@@ -1,5 +1,6 @@
-import { memo } from "react";
-import { FileText } from "lucide-react";
+import { memo, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { FileText, Loader2 } from "lucide-react";
 
 import { Markdown } from "../../components/Markdown.tsx";
 import { SavableMedia } from "../../components/SavableMedia.tsx";
@@ -41,6 +42,7 @@ function MessageImpl({
   toolBrowserWindows,
   createdAt,
   streaming,
+  generating,
 }: {
   role: Role;
   text: string;
@@ -56,6 +58,7 @@ function MessageImpl({
   toolBrowserWindows?: Map<string, string>; // toolCallId → browser window a Browser call opened
   createdAt?: number;
   streaming: boolean;
+  generating?: "image" | "video"; // a generation session's pool — drives the elapsed-time indicator (task 3)
 }) {
   if (role === "user") {
     return (
@@ -97,13 +100,37 @@ function MessageImpl({
     );
   }
   const hasTools = !!toolCalls?.length;
+  const hasMedia = !!images?.length || !!videos?.length;
+  // Generation placeholder still running: an elapsed-time indicator (not a bare pulse) so a slow video
+  // reads as working, not hung — the AC3 "not a hung spinner" requirement (task 3).
+  const genPending = generating && streaming && !text && !hasMedia && !hasTools;
   return (
     <div className="space-y-2">
       {thinking && <Thinking text={thinking} streaming={streaming && !text} />}
-      {(text || (streaming && !hasTools)) && (
-        <Markdown text={text} className="text-neutral-800 prose-pre:bg-neutral-900 prose-pre:text-neutral-100">
-          {streaming && <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-neutral-400 align-middle" />}
-        </Markdown>
+      {genPending ? (
+        <GenerationProgress kind={generating} />
+      ) : (
+        (text || (streaming && !hasTools)) && (
+          <Markdown text={text} className="text-neutral-800 prose-pre:bg-neutral-900 prose-pre:text-neutral-100">
+            {streaming && <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-neutral-400 align-middle" />}
+          </Markdown>
+        )
+      )}
+      {/* Assistant-message media = generation output (task 3): the generate turn stamps results here, not
+          on a tool card. Offer send-to-chat — the bridge out of a walled generation session. */}
+      {images && images.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {images.map((im, i) => (
+            <SavableMedia kind="image" key={i} src={im.url} name={im.name} badge={im.ref} sendToChat className="max-h-72 cursor-zoom-in rounded-xl object-cover" />
+          ))}
+        </div>
+      )}
+      {videos && videos.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {videos.map((v, i) => (
+            <SavableMedia kind="video" key={i} src={v.url} name={v.name} badge={v.ref} sendToChat className="max-h-72 rounded-xl" />
+          ))}
+        </div>
       )}
       {toolCalls?.map((c) => (
         <ToolCard
@@ -121,6 +148,23 @@ function MessageImpl({
   );
 }
 
+// Elapsed-time indicator for a running generation. Ticks each second; video carries a "slow" hint
+// (generation is minutes per second of clip). Self-contained timer — mounts only while pending.
+function GenerationProgress({ kind }: { kind: "image" | "video" }) {
+  const { t } = useTranslation();
+  const [secs, setSecs] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setSecs((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <div className="flex items-center gap-2 text-sm text-neutral-500">
+      <Loader2 size={15} className="animate-spin" />
+      <span>{t(`gen.generating_${kind}`, { secs })}</span>
+    </div>
+  );
+}
+
 type MessageProps = Parameters<typeof MessageImpl>[0];
 
 // Tool maps get fresh identity every parent render — compare only the entries this message's calls read.
@@ -134,7 +178,8 @@ function sameMessage(prev: MessageProps, next: MessageProps): boolean {
     prev.files !== next.files ||
     prev.toolCalls !== next.toolCalls ||
     prev.createdAt !== next.createdAt ||
-    prev.streaming !== next.streaming
+    prev.streaming !== next.streaming ||
+    prev.generating !== next.generating
   ) {
     return false;
   }

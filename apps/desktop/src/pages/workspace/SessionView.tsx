@@ -20,6 +20,7 @@ import { useCtx } from "../../renderer/ctx.tsx";
 import { getAgent } from "../../core/agents.ts";
 import { baseSystemFor, fullSystemFor } from "../../core/sessions/system.ts";
 import { useProvider } from "../../core/settings.ts";
+import { containerTarget, getContainer } from "../../core/containers.ts";
 import { useOutsideClick } from "../../lib/hooks.ts";
 import { fmtTokens } from "../../lib/format.ts";
 import { toggleRightPanel, useRightPanel } from "../../core/ui.ts";
@@ -135,8 +136,12 @@ export function SessionView() {
     setRenaming(false);
   }
 
+  const target = containerTarget(getContainer(session.containerId)?.type);
+  const isGen = target !== "text";
+
   function submit(text: string, atts: Attachments) {
-    void ctx.sessions.send(text, atts);
+    if (isGen) void ctx.sessions.generate(text, atts);
+    else void ctx.sessions.send(text, atts);
   }
 
   return (
@@ -229,6 +234,7 @@ export function SessionView() {
                   toolChildren={toolChildren}
                   toolBrowserWindows={toolBrowserWindows}
                   streaming={streaming && i === session.messages.length - 1}
+                  generating={isGen ? (target as "image" | "video") : undefined}
                 />
               </div>
             ),
@@ -297,7 +303,9 @@ export function SessionView() {
               disabled={compacting || full}
               modelLabel={session.meta.lastModel}
               streaming={streaming}
-              onStop={() => ctx.sessions.stopTurn(session.id)}
+              target={target}
+              consumesPending={!isGen}
+              onStop={() => (isGen ? ctx.sessions.stopGeneration(session.id) : ctx.sessions.stopTurn(session.id))}
               onSubmit={submit}
             />
           </>

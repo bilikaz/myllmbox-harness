@@ -39,12 +39,17 @@ capability model are what a generation session pins and what the composer reads.
 
 ## Scope
 
-- **Sidebar sections Chats / Images / Videos** — grouping sessions by target. (Data
-  placement is a D below.)
+- **Sidebar sections Chats / Images / Videos** — the sidebar already groups by container
+  type; the `image`/`video` type blocks are the generation sections (D2).
 - **Composer send-branch** — a new "generation turn" path in the session store: append the
   prompt as a user message, run `ImageGenerate`/`ImageEdit`/`VideoGenerate` via
-  `ctx.tools.run`, append the result message. Reuses media externalization + `img-N`/`vid-N`
-  aliasing + persistence (the `media` repo) — **no new gallery store**.
+  `ctx.tools.run` (with the session's pinned model threaded through — see implementation.md),
+  append the result message. Reuses media externalization + `img-N`/`vid-N` aliasing +
+  persistence (the `media` repo) — **no new gallery store**.
+- **Generation knobs from the shared config** — the composer surfaces the same knobs the
+  agent uses: **aspect · quality** (image), **aspect · quality · duration** (video),
+  initialized from `getAppConfig().imageGen/videoGen` defaults and bounded by the pinned
+  model's `maxImageSize`/`maxVideoSize`. **Persisted per session** (pick once, reused).
 - **Attachments gated by the pinned model's accepted inputs** (task 2's capability model):
   hidden for a text→image model, shown for edit-capable / i2v-capable models.
 - **Composer inline model picker** — clicking the model chip by the input drops down the
@@ -62,13 +67,17 @@ capability model are what a generation session pins and what the composer reads.
   the box's CORS (already true for chat). Gallery **page-compose** (A4 layout) is **not**
   part of this — desktop-only, separate.
 
-## Decisions to confirm
+## Decisions
 
 - **D1 — Sessions are threads**, not one-per-generation (one-off = short thread). *(Settled.)*
-- **D2 — Where the target lives.** Recommended: a **session-level `target`** field the
-  sidebar groups by — no new container type (we removed one in task 1). Alternative: new
-  `image`/`video` **container types** (parallels chat exactly, but reintroduces
-  container-type machinery). *(Recommend session-level; settle concretely in implementation.md.)*
+- **D2 — Target = container type (settled).** `ContainerType` gains `image`/`video`; the
+  container's type carries the target. Chosen over a session-level field because a session
+  must belong to a container anyway (`containerId` never null, [ADR-0046](../../adr/0046-typed-containers.md)),
+  so a field would still need a home container — the type is the natural carrier, and the
+  sidebar already groups by it. `image`/`video` are deliberate first-class kinds, not the
+  dead `remote` type task 1 pruned. `containerTarget(type)`: chat/local → `text`,
+  image → `image`, video → `video`. **Audio** is the natural 5th type — deferred until an
+  audio model is available to test.
 - **D3 — Results are messages in the session** (user prompt + result), reusing the
   transcript — never synthetic assistant tool-calls in a model's history.
 - **D4 — Generation is walled from agent context**; Send-to-chat is the deliberate bridge.
@@ -82,8 +91,9 @@ capability model are what a generation session pins and what the composer reads.
    matching target/model and opens a chat-like view.
 2. In an image session, a prompt generates an image into the transcript; attaching/referencing
    a prior image **edits** it; the whole thing persists + reopens like a chat (web + Electron).
-3. In a video session, a prompt generates a video (with real progress, not a hung spinner);
-   attachments appear only when the model accepts image/video input.
+3. In a video session, a prompt generates a video with an **elapsed-time / typical-duration
+   indicator** (the tool call blocks while the video provider polls internally — no per-step
+   %, but not a hung spinner); attachments appear only when the model accepts image/video input.
 4. The composer's model chip is an **inline pool picker** (no settings redirect) in every
    session type; switching changes the active model.
 5. The right panel shows **capabilities** in a generation session, the **context meter** in a
@@ -100,6 +110,6 @@ capability model are what a generation session pins and what the composer reads.
   render port, its own feature.
 - The **node-graph / ComfyUI canvas** — deferred; the box APIs are high-level, so it buys
   little until they expose more (discussed).
-- Audio generation/recognition surfaces (the use-cases exist from task 2; a UI for them is a
-  later section if wanted).
+- Audio generation/recognition surfaces (the use-cases exist from task 2; audio is the
+  natural 5th container type — a later section once an audio model is available to test).
 - Any new backend or sync.
