@@ -8,6 +8,7 @@ it lives in an ADR (or a convention), and these docs hold the evolving specifics
 
 | Doc | What it is | Decision recorded in |
 | --- | --- | --- |
+| [iterations.md](iterations.md) | How we build one development iteration — the three docs (`task`/`implementation`/`report`), the flow, and mid-iteration `fix-` rounds | foundational (the repo's working method) |
 | [drift.md](drift.md) | The independent drift reviewer's brief — who runs it, the job, the growing checklist, the `drift.md` format | [ADR-0000](../adr/0000-adr-scope.md) (recorded exception) |
 
 When a living doc changes, keep its mirror in [/CLAUDE.md](../../CLAUDE.md) in sync in
