@@ -21,7 +21,7 @@
   },
   "build": {
     "appId": "eu.myllmbox.harness",
-    "productName": "MyLLMBox Harness",
+    "productName": "My LLM Box Harness",
     "npmRebuild": false,
     "directories": {
       "output": "release",
