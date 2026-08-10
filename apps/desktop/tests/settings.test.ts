@@ -13,6 +13,7 @@ import {
   removeModel,
   removeProvider,
   resolveMediaProvider,
+  resolveModelRef,
   slotOptions,
   updateModel,
   updateProvider,
@@ -115,6 +116,18 @@ describe("the gate + assignment + resolution", () => {
 
     updateProvider(pid, { baseUrl: "" });
     expect(resolveMediaProvider("image")).toBeNull();
+  });
+
+  it("resolveModelRef resolves a pinned pick directly, independent of pool membership (task 3)", () => {
+    const { pid, mid } = seedProvider();
+    updateModel(pid, mid, { maxImageSize: "1024x1024" });
+    // No assignModels: the composer's pinned pick is resolved by ref, not by pool priority — the
+    // generation turn must run THIS model even if it isn't (or isn't first) in the pool.
+    expect(resolveModelRef({ providerId: pid, modelId: mid })).toMatchObject({
+      provider: { name: "A", type: "openai", baseUrl: "http://a/v1" },
+      model: { id: "m1", maxImageSize: "1024x1024" },
+    });
+    expect(resolveModelRef({ providerId: pid, modelId: "nope" })).toBeNull();
   });
 
   it("a structurally-malformed stored row hydrates to DEFAULTS (empty) instead of throwing", async () => {

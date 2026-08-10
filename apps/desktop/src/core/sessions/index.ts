@@ -12,6 +12,8 @@ export {
   unlinkAgent,
   getSessionsForContainer,
   getLastSystem,
+  setPinnedModel,
+  setGen,
 } from "./store.ts";
 export { lastSummaryIndex } from "./mediaRefs.ts";
 export { SessionEngine } from "./engine.ts";

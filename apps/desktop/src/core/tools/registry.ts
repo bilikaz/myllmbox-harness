@@ -129,7 +129,7 @@ export class ToolRegistry {
       };
     }
     try {
-      return await tool.run(args, call.cwd, controller.signal, { imageOutputDir: call.imageOutputDir, mediaRefs: call.mediaRefs, sessionId: call.sessionId, meta: call.meta });
+      return await tool.run(args, call.cwd, controller.signal, { imageOutputDir: call.imageOutputDir, mediaRefs: call.mediaRefs, sessionId: call.sessionId, meta: call.meta, target: call.target });
     } catch (e) {
       return { ok: false, output: `error running ${call.name}: ${errorMessage(e)}` };
     } finally {

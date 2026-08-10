@@ -65,6 +65,13 @@ export interface SessionRuntime {
   // Media alias counter ("img-N"/"vid-N") — next number to hand out. Never recomputed from the
   // transcript: renumbering would break references the model (or user) already holds.
   mediaSeq?: number;
+  // Generation sessions (task 3): the user's pinned model pick — the inline composer picker sets it,
+  // and the generate turn resolves it to a call target so THIS model runs, overriding the pool head.
+  // Distinct from lastModel (the churning "what served the last turn" label).
+  pinnedModel?: { providerId: string; modelId: string };
+  // Generation knobs, picked once per session and reused: aspect / quality (image + video) + duration
+  // (video). Defaults come from getAppConfig().imageGen/videoGen when unset.
+  gen?: { aspect?: string; quality?: string; duration?: number };
   // Graph-run MILESTONE (graph sessions only): the last node boundary the run settled at, written at the
   // same settle cadence as messages. A relaunch (RunState is memory-only) revives the run parked here via
   // `continue`; `dialogSurface` re-binds a live interview sub chat instead of orphaning it. Single-track

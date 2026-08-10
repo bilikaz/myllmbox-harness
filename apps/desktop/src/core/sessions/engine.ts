@@ -1,12 +1,12 @@
 import type { ErrorKind, ToolCallRequest } from "../../llm/types.ts";
 import { llmLog } from "../../llm/debug.ts";
 import type { Attachments, Session } from "./types.ts";
-import { resolveMain } from "../settings.ts";
+import { resolveMain, resolveModelRef } from "../settings.ts";
 import type { Ctx } from "../ctx.ts";
 import { getAppConfig } from "../config/index.ts";
 import { denyApprovalsForSession } from "../approvals.ts";
 import { type Agent } from "../agents.ts";
-import { getActiveContainerId, getContainer } from "../containers.ts";
+import { getActiveContainerId, getContainer, containerTarget } from "../containers.ts";
 import { type ToolName, type ToolPermission } from "../tools/types.ts";
 import { deliveryNudge } from "../prompts.ts";
 import { GET_AGENT_CONTENT, aliasOf, childrenOf, collectAgentContent } from "../tools/helpers/agents/catalog.ts";
@@ -22,6 +22,10 @@ import {
   getStreamingIds,
   isFull,
   commitMessages,
+  completeGeneration,
+  failGeneration,
+  dropGenerationPlaceholder,
+  setStreaming,
   pushToolResult,
   pushTurn,
   setDelivered,
@@ -66,6 +70,8 @@ export interface SendOptions extends Attachments {
 // Constructed once per host (init) and carried on ctx.sessions; the renderer reaches it via useCtx().sessions.
 export class SessionEngine {
   private readonly inflight = new Map<string, AbortController>();
+  private readonly genCalls = new Map<string, string>(); // sid → in-flight generation tool-call id (task 3), for stopGeneration
+  private readonly genCancelled = new Set<string>(); // sids whose in-flight generation the user Stopped — cancel, not failure
   // Async sub-agent delivery: children finish out-of-band, so each finished child is queued here per
   // parent (childSid → short alias) and pushed on the parent's next idle turn — never mid-print.
   private readonly deliveries = new Map<string, Map<string, number>>();
@@ -299,6 +305,66 @@ export class SessionEngine {
   // Composer-facing send: targets the active session.
   async send(text: string, opts: SendOptions = {}): Promise<void> {
     await this.sendTo(getActiveId(), text, opts);
+  }
+
+  // A generation turn (task 3): an image/video session's composer sends to its media pool, NOT the LLM.
+  // Lands the prompt (+ any attachments) as a user turn, runs the pool's tool directly (no loop), and
+  // fills the produced media into the transcript. The pinned model rides as the call's `target`; image
+  // references (edits) ride as their img-N aliases + content in `mediaRefs` — the same lane the agent uses.
+  async generate(text: string, atts: Attachments = {}): Promise<void> {
+    const sid = getActiveId();
+    const session = getSession(sid);
+    if (!session) return;
+    const prompt = text.trim();
+    const attImgs = atts.images ?? [];
+    if (!prompt && !attImgs.length) return; // nothing to generate from
+    // One generation per session. Claim SYNCHRONOUSLY (before the first await) so two submits in the same
+    // frame can't both pass the guard and start parallel generations that corrupt each other's placeholder.
+    if (getStreamingIds().has(sid)) return;
+    setStreaming(sid, true);
+
+    let pushed = false;
+    try {
+      const pool = containerTarget(getContainer(session.containerId)?.type); // "image" | "video"
+      await ensureLoaded(sid);
+      pushTurn(sid, prompt, atts.images, atts.files, atts.videos); // user msg (stamps img-N) + assistant placeholder
+      pushed = true;
+      commitMessages(sid); // persist the user prompt at once (like chat) — a long video can't lose it on reload
+
+      // Image edit: the just-stamped attachment images become references (alias + content in mediaRefs).
+      const refImgs = getSession(sid)?.messages.at(-2)?.images ?? [];
+      const mediaRefs: Record<string, { url: string; mime?: string; name?: string }> = {};
+      for (const g of refImgs) if (g.ref) mediaRefs[g.ref] = { url: g.url, mime: g.mime, name: g.name };
+
+      const name = pool === "video" ? "VideoGenerate" : refImgs.length ? "ImageEdit" : "ImageGenerate";
+      const args: Record<string, unknown> = { prompt, ...(session.meta.gen ?? {}) };
+      if (name === "ImageEdit") args.references = refImgs.flatMap((g) => (g.ref ? [g.ref] : []));
+      const target = session.meta.pinnedModel ? resolveModelRef(session.meta.pinnedModel) ?? undefined : undefined;
+
+      const callId = crypto.randomUUID();
+      this.genCalls.set(sid, callId);
+      const call: ToolCallRequest = { id: callId, name, arguments: JSON.stringify(args), cwd: "", target, mediaRefs };
+      const res = await this.ctx.tools.run(call);
+      if (this.genCancelled.has(sid)) dropGenerationPlaceholder(sid); // user Stop: not a failure
+      else if (res?.images?.length || res?.videos?.length) completeGeneration(sid, { images: res.images, videos: res.videos });
+      else failGeneration(sid, res?.output ?? `${name} produced no output.`);
+    } catch (e) {
+      if (this.genCancelled.has(sid)) dropGenerationPlaceholder(sid);
+      else if (pushed) failGeneration(sid, errorMessage(e));
+    } finally {
+      this.genCancelled.delete(sid);
+      this.genCalls.delete(sid);
+      setStreaming(sid, false);
+    }
+  }
+
+  // Abort an in-flight generation (the composer Stop in a generation session). Marks the session so the
+  // result handler treats the aborted tool result as a cancel (drop the placeholder), not an error.
+  stopGeneration(sid: string): void {
+    const callId = this.genCalls.get(sid);
+    if (!callId) return;
+    this.genCancelled.add(sid);
+    this.ctx.tools.cancel(callId);
   }
 
   // Targets the created session BY ID — the active session can change between create and send.

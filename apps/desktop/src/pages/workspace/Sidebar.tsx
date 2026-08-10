@@ -5,11 +5,13 @@ import {
   ChevronDown,
   FolderClosed,
   Globe,
+  Image as ImageIcon,
   MessageSquare,
   Pencil,
   Plus,
   Settings,
   SlidersHorizontal,
+  Video as VideoIcon,
   X,
 } from "lucide-react";
 
@@ -102,6 +104,16 @@ export function Sidebar() {
     if (created) selectContainer(created.id);
   }
 
+  async function addImages() {
+    const created = await createContainer({ type: "image", name: t("sidebar.newImages") });
+    if (created) selectContainer(created.id);
+  }
+
+  async function addVideos() {
+    const created = await createContainer({ type: "video", name: t("sidebar.newVideos") });
+    if (created) selectContainer(created.id);
+  }
+
   // Delete a container and cascade to its sessions. Keep at least one container so a session
   // always has a home; the store re-points `active` if the active container is the one removed.
   function removeContainer(id: string) {
@@ -126,6 +138,9 @@ export function Sidebar() {
     { type: "chat", label: t("sidebar.chats"), onAdd: addChat },
   ];
   if (isDesktop) blocks.push({ type: "local", label: t("sidebar.local"), onAdd: addLocalWorkspace });
+  // Generation blocks — a network concern, available on web too (not gated on the filesystem).
+  blocks.push({ type: "image", label: t("sidebar.images"), onAdd: addImages });
+  blocks.push({ type: "video", label: t("sidebar.videos"), onAdd: addVideos });
 
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-neutral-200 bg-neutral-50">
@@ -266,7 +281,10 @@ export function Sidebar() {
 }
 
 function iconForType(type: ContainerType): typeof FolderClosed {
-  return type === "chat" ? MessageSquare : FolderClosed;
+  if (type === "chat") return MessageSquare;
+  if (type === "image") return ImageIcon;
+  if (type === "video") return VideoIcon;
+  return FolderClosed;
 }
 
 // One sidebar row — a container or a session. Inline-renames when `renaming`; reveals

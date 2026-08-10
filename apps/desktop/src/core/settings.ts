@@ -216,6 +216,13 @@ class Settings extends Consumer<SettingsState> {
     return hit ? this.toConfig(hit.p, hit.m) : null;
   }
 
+  // Resolve a SPECIFIC pool member (a pinned pick) to a call target — a generation session uses this to
+  // override the pool head with the user's chosen model. Null if the ref no longer resolves (deleted/moved).
+  resolveByRef(ref: ModelAssignment): LLMConfig | null {
+    const hit = findModel(this.state.providers, ref);
+    return hit ? this.toConfig(hit.p, hit.m) : null;
+  }
+
   // The full ordered pool per service for the concurrency runner. `reserve` (foreground-held slots)
   // applies only on the `text` pool — background sub-agent runs share it and get the open band (c − reserve).
   private resolvePools(): RunnerPools {
@@ -416,4 +423,9 @@ export const detectProviderModels = (id: string): Promise<{ ok: boolean; count: 
 // config.llm resolution for any service (used by media tools).
 export function resolveMediaProvider(useCase: MediaService): LLMConfig | null {
   return inst.resolveConfig(useCase);
+}
+
+// Resolve a specific pinned pick ({providerId, modelId}) to a call target (generation sessions).
+export function resolveModelRef(ref: ModelAssignment): LLMConfig | null {
+  return inst.resolveByRef(ref);
 }

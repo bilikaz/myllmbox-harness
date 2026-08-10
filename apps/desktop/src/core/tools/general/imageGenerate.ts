@@ -82,7 +82,7 @@ export class ImageGenerate extends BaseGeneralTool {
       save = prep;
     }
 
-    const out = await runImageGeneration(this.llm, { prompt, aspect: args.aspect, quality: args.quality, signal });
+    const out = await runImageGeneration(this.llm, { prompt, aspect: args.aspect, quality: args.quality, target: ctx?.target, signal });
     if ("error" in out) return { ok: false, output: `ImageGenerate ${out.failed ? "failed" : "rejected"}: ${out.error}` };
 
     const { b64, mime } = out;

@@ -128,7 +128,7 @@ export class ImageEdit extends BaseGeneralTool {
 
     // Inputs present → the trunk takes the edit/reference path (/images/edits); the output size is chosen
     // by the model (a 1:1 hero composed into a 16:9 scene, etc.) — NOT inherited from the reference.
-    const out = await runImageGeneration(this.llm, { prompt, inputs, aspect: args.aspect, quality: args.quality, signal });
+    const out = await runImageGeneration(this.llm, { prompt, inputs, aspect: args.aspect, quality: args.quality, target: ctx?.target, signal });
     if ("error" in out) return { ok: false, output: `ImageEdit ${out.failed ? "failed" : "rejected"}: ${out.error}` };
 
     const { b64, mime } = out;

@@ -30,7 +30,11 @@
     "newChat": "Naujas pokalbis",
     "waitingSlot": "Laukiama laisvos vietos…",
     "streaming": "Generuojamas atsakymas…",
-    "unread": "Neperskaityta"
+    "unread": "Neperskaityta",
+    "images": "Vaizdai",
+    "videos": "Vaizdo įrašai",
+    "newImages": "Vaizdai",
+    "newVideos": "Vaizdo įrašai"
   },
   "container": {
     "title": "Darbo srities nustatymai",
@@ -228,7 +232,9 @@
     "compactedDivider": "Suglaudinta — žinutės aukščiau lieka čia, bet modeliui nebesiunčiamos",
     "compactedSummary": "Modeliui išsiųsta santrauka",
     "healing": "Savitaisa (bandymas {{round}})…",
-    "waitingInput": "Laukiama jūsų įvesties…"
+    "waitingInput": "Laukiama jūsų įvesties…",
+    "imageRefEdit": "Pridėta kaip redagavimo pavyzdys — vaizdų modelis naudos jį kaip pagrindą.",
+    "noGenRef": "Vaizdo įrašo generavimas nenaudoja pavyzdžio — aprašykite jį tekstu."
   },
   "progress": {
     "progress": "Eiga",
@@ -304,11 +310,41 @@
     "close": "Užverti",
     "closeEsc": "Užverti (Esc)",
     "saveImage": "Išsaugoti paveikslėlį",
-    "saveVideo": "Išsaugoti vaizdo įrašą"
+    "saveVideo": "Išsaugoti vaizdo įrašą",
+    "sendToChat": "Siųsti į pokalbį"
   },
   "gallery": {
     "hint": "Visi galerijos puslapių išdėstymai — nurodykite agentui kodą (pvz., „use 5-3“). Spustelėkite peržiūrą, kad padidintumėte.",
     "groupTitle": "{{count}} paveikslėliai",
     "unavailable": "Išdėstymų peržiūros čia nepasiekiamos (tik darbalaukio programoje)."
+  },
+  "gen": {
+    "aspect": "Kraštinių santykis",
+    "quality": "Kokybė",
+    "quality_low": "Žema",
+    "quality_good": "Gera",
+    "quality_super": "Aukščiausia",
+    "duration": "Trukmė (sekundės)",
+    "seconds": "s",
+    "configureModel": "Sukonfigūruokite modelį",
+    "placeholder_image": "Aprašykite generuojamą vaizdą…",
+    "placeholder_video": "Aprašykite generuojamą vaizdo įrašą…",
+    "generating_image": "Generuojamas vaizdas… {{secs}}s",
+    "generating_video": "Generuojamas vaizdo įrašas… {{secs}}s (gali užtrukti kelias minutes)"
+  },
+  "capabilities": {
+    "title": "Modelio galimybės",
+    "noModel": "Modelis nesukonfigūruotas — pridėkite jį Nustatymai → Tiekėjai.",
+    "output": "Išvestis",
+    "inputs": "Priima",
+    "none": "tik tekstą",
+    "hint_image": "Kraštinių santykis ir kokybė taikomi kiekvienam vaizdui. Pridėkite vaizdą, kad jį redaguotumėte.",
+    "hint_video": "Kraštinių santykis, kokybė ir trukmė taikomi kiekvienam klipui."
+  },
+  "modality": {
+    "text": "Tekstas",
+    "image": "Vaizdas",
+    "video": "Vaizdo įrašas",
+    "audio": "Garsas"
   }
 }
