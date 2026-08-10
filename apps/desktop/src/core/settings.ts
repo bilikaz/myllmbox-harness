@@ -21,7 +21,7 @@ import { writeRunnerPools, modelKey, type RunnerPools, type RunnerSlot } from ".
 import { listProviderModels } from "../llm/index.ts";
 import { errorMessage } from "../lib/errors.ts";
 
-const KEY = "v84-harness:settings";
+const KEY = "myllmbox-harness:settings";
 
 const ALL_SERVICES: readonly ModelService[] = ["main", "subAgent", ...MEDIA_SERVICES];
 
@@ -163,7 +163,7 @@ function pruneServices(
 
 class Settings extends Consumer<SettingsState> {
   constructor(ctx: Ctx) {
-    super(ctx, KEY, DEFAULTS, true); // synced — providers/models (incl. keys) follow the connection to the cloud
+    super(ctx, KEY, DEFAULTS);
   }
 
   // Reject a row whose shape doesn't match SettingsState (legacy/corrupt) — DEFAULTS, never a throw.

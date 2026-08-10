@@ -77,7 +77,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
 
   get clientMetadata(): OAuthClientMetadata {
     return {
-      client_name: "v84-harness",
+      client_name: "myllmbox-harness",
       redirect_uris: [OAUTH_REDIRECT_URI],
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],

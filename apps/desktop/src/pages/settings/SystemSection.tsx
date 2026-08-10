@@ -8,7 +8,7 @@ import { llmDebugEnabled, setLlmDebug } from "../../llm/debug.ts";
 
 // The general "Settings" section: two tabs — the user's global system message ("User message"), and the
 // app tunables ("Configuration": browser reading, async sub-agents, developer mode, LLM debug logging).
-// All persist into config.app overrides (synced, follows the connection), except LLM debug (a local flag).
+// All persist into config.app overrides, except LLM debug (a separate local flag).
 export function SystemSection() {
   const [tab, setTab] = useState<"message" | "config">("message");
 

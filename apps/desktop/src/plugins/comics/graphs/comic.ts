@@ -18,10 +18,8 @@
 import { BaseGraph, EXIT } from "../../../core/graph/base.ts";
 import type { GraphNode, NodeCtx, Route } from "../../../core/graph/types.ts";
 import { getConfig } from "../../../core/config/index.ts";
-import { getContainer } from "../../../core/containers.ts";
 import { resolveMain, resolveMediaProvider } from "../../../core/settings.ts";
 import { extractRefTokens, isMediaRef } from "../../../core/sessions/mediaRefs.ts";
-import { getSession } from "../../../core/sessions/store.ts";
 import { supportedCounts, findLayout, type GalleryLayout } from "../../../core/gallery/catalog.ts";
 import i18n from "../../../lib/i18n.ts";
 import { COMICS_DEFAULTS, COMICS_SLUG, type ComicsSettings } from "../manifest.ts";
@@ -54,7 +52,7 @@ interface Config {
   cast: string[];
   panels: Panel[];
   // Character changes the approved story implies (new gear, a scar, growth) — recorded in the plan,
-  // STAMPED by the graph at finish (bible `lore` + memory). The agent never edits files or memory.
+  // STAMPED by the graph at finish into the bible `lore`. The agent never edits files.
   lore?: { mascot: string; note: string }[];
 }
 // SELF-DESCRIBING run state: `panel` is the panel being worked (1-based) and `completed` maps
@@ -529,8 +527,8 @@ export default class ComicGraph extends BaseGraph {
       end: (_ctx, input, response) => ({ goTo: "finish", input: { ...(input as Flow), page: String(response) } }),
     },
 
-    // Deterministic epilogue: every cast bible gets the story record + its settled lore changes, the
-    // lore goes to memory (best-effort — memory offline never blocks the comic), then the audit exits.
+    // Deterministic epilogue: every cast bible gets the story record + its settled lore changes in the
+    // workspace bible JSON, then the audit exits.
     finish: {
       start: async (ctx, input) => {
         const f = input as Flow;
@@ -550,14 +548,7 @@ export default class ComicGraph extends BaseGraph {
             // an unparseable bible never blocks the finished comic
           }
         }
-        const workspace = getContainer(getSession(ctx.sid)?.containerId)?.name;
-        for (const l of lore) {
-          await ctx.runTool("SaveMemory", {
-            content: `Comic mascot "${l.mascot}"${workspace ? ` (workspace "${workspace}")` : ""} — lore update (${date}, from "${f.cfg.title}"): ${l.note}`,
-            scope: "private",
-            category: "comics-mascots",
-          });
-        }
+        // Lore updates are persisted into the workspace bible JSON (written above).
         // `show` makes the exit LOAD the finished page into the chat (real ImageLoad card) — the
         // result is seen, not hunted down in a folder.
         return { value: { title: f.cfg.title, page: f.page, panels: f.completed, layout: f.layout.handle, show: f.page ? [f.page] : [] } };

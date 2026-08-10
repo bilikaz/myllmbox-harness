@@ -21,7 +21,7 @@ export function GraphsPanel() {
   // Are we currently in a workspace? A workspace-requiring graph's launcher is hidden outside one — the
   // run would inherit this container, and its file-reading heads would be masked to no workspace.
   const activeType = getContainer(useActiveContainerId())?.type;
-  const inWorkspace = activeType === "local" || activeType === "remote";
+  const inWorkspace = activeType === "local";
 
   const graphs = listGraphs().filter((g) => plugins[g.pluginSlug]?.enabled && (inWorkspace || !g.needsWorkspace()));
   // ACTIVE means a LIVE run: streaming now, or alive-but-paused (parked / soft-stopped / mid-dialog —

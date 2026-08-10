@@ -4,7 +4,7 @@ import { initReactI18next } from "react-i18next";
 import en from "../locales/en.json";
 import lt from "../locales/lt.json";
 
-const KEY = "v84-harness:lang";
+const KEY = "myllmbox-harness:lang";
 
 // Merge each in-tree plugin's locales under translation.plugins.<slug>, so a plugin reads its strings
 // as t("plugins.<slug>.<key>") — namespaced, collision-free, and still key-parity-checked across en/lt.

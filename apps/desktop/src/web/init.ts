@@ -1,10 +1,9 @@
-// Web harness init — creates Ctx, installs the per-entity persistence (IndexedDB locally, remote
-// API when connected) + tools + the browser host api. Called once from renderer/main.tsx.
+// Web harness init — creates Ctx, installs the local per-entity persistence (IndexedDB) + tools +
+// the browser host api. Called once from renderer/main.tsx.
 
 import { Ctx } from "../core/ctx.ts";
 import { hydrateConsumers } from "../core/storage/consumer.ts";
 import { ToolRegistry } from "../core/tools/registry.ts";
-import { attachAccount, authedFetch, isConnected } from "../core/account.ts";
 import { initAppConfig } from "../core/config/app.ts";
 import { initSettings } from "../core/settings.ts";
 import { initPluginsConfig, installEnabledPlugins } from "../core/plugins/config.ts";
@@ -18,17 +17,14 @@ import { hydrate as hydrateSessions, setSessionStorage } from "../core/sessions/
 import { StorageEngine } from "../core/storage/engine.ts";
 import { gateDataVersion } from "../core/storage/version.ts";
 import { idbRepos } from "../core/storage/idb.ts";
-import { remoteRepos } from "../core/storage/remote.ts";
 import type { HostApi, MediaModelsResult, MediaEndpoint } from "../core/host.ts";
 import { errorMessage } from "../lib/errors.ts";
 
-// Web runs all in-process (renderer): general + account tools (no workspace/fs tier). Plugin tools in
-// those same tiers are globbed alongside (the local/ + remote/ tiers need main, absent in the web bundle).
+// Web runs all in-process (renderer): general tools only (no workspace/fs tier). Plugin general-tier
+// tools are globbed alongside (the local/ tier needs main, absent in the web bundle).
 const MODULES = {
   ...import.meta.glob<Record<string, unknown>>("../core/tools/general/*.ts", { eager: true }),
-  ...import.meta.glob<Record<string, unknown>>("../core/tools/account/*.ts", { eager: true }),
   ...import.meta.glob<Record<string, unknown>>("../plugins/*/tools/general/*.ts", { eager: true }),
-  ...import.meta.glob<Record<string, unknown>>("../plugins/*/tools/account/*.ts", { eager: true }),
 };
 // The browser host api: save = download via an <a>, mediaModels = a direct fetch. No folder picker in the browser.
 function browserHost(): HostApi {
@@ -65,8 +61,8 @@ function browserHost(): HostApi {
 
 export async function init(): Promise<Ctx> {
   const ctx = new Ctx();
-  // Persistence: per-entity repositories — IndexedDB locally, the API client when connected.
-  ctx.storage = new StorageEngine(await idbRepos(), isConnected() ? remoteRepos(authedFetch) : null);
+  // Persistence: per-entity repositories in IndexedDB.
+  ctx.storage = new StorageEngine(await idbRepos());
   await gateDataVersion(ctx.storage); // wipe local data if it's from an older incompatible build (before anything reads it)
   setSessionStorage(ctx.storage); // inject into the session store (SessionEngine ran before ctx.storage existed)
 
@@ -85,7 +81,6 @@ export async function init(): Promise<Ctx> {
   initUi(ctx);
   initBrowser(ctx);
   initContainers(ctx);
-  attachAccount(ctx);
   await hydrateConsumers();
   await hydrateContainers();
   await hydrateAgents();

@@ -1,6 +1,5 @@
 // The app-tunables config — the ONLY place overrides meet defaults.
-// A ctx-injected consumer: overrides persist through ctx.storage (the settings table; synced —
-// follows the connection to the cloud, like settings).
+// A ctx-injected consumer: overrides persist through ctx.storage (the settings table), like settings.
 
 import { Consumer } from "../storage/consumer.ts";
 import type { Ctx } from "../ctx.ts";
@@ -12,7 +11,7 @@ export { CONFIG_DEFAULTS };
 type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K] };
 export type ConfigOverrides = DeepPartial<ConfigApp>;
 
-const KEY = "v84-harness:config";
+const KEY = "myllmbox-harness:config";
 
 export function posInt(v: unknown, fallback: number): number {
   return typeof v === "number" && Number.isInteger(v) && v > 0 ? v : fallback;
@@ -93,7 +92,7 @@ class AppConfig extends Consumer<ConfigOverrides> {
   private cached: ConfigApp | null = null;
 
   constructor(ctx: Ctx) {
-    super(ctx, KEY, {}, true); // synced — app tunables follow the connection to the cloud
+    super(ctx, KEY, {});
   }
 
   // Cache invalidates whenever state changes (hydrate or commit both notify).

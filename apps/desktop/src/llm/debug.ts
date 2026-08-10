@@ -1,7 +1,7 @@
 // LLM debug logging. On by default in dev.
 import { ConsoleLogger } from "../lib/logger/index.ts";
 
-const KEY = "v84-harness:llm-debug";
+const KEY = "myllmbox-harness:llm-debug";
 
 function initial(): boolean {
   try {

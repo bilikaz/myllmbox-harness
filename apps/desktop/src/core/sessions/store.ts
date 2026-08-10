@@ -450,9 +450,7 @@ export function deleteSession(id: string): void {
   if (data && gone) {
     const repos = data.repos();
     void repos.sessions.remove(id).catch((e: unknown) => log.warn("delete_failed", { sid: id, error: errorMessage(e) }));
-    // Offline (local provider) hard-clears the transcript too; connected (remote) the server
-    // soft-deletes the session and keeps its messages for restore.
-    if (!data.connected) void repos.messages.replaceForSession(id, []);
+    void repos.messages.replaceForSession(id, []); // hard-delete clears the transcript too
   }
   if (sessions.length === 0) {
     createSession(); // never leave the user with zero sessions (persists its own meta row)

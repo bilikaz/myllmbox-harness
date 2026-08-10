@@ -26,7 +26,6 @@
     "delete": "Delete",
     "chats": "Chats",
     "local": "Local",
-    "remote": "Remote",
     "add": "Add",
     "newChat": "New chat",
     "waitingSlot": "Waiting for a free slot…",
@@ -116,22 +115,9 @@
     "title": "Settings",
     "search": "Search"
   },
-  "account": {
-    "title": "Account",
-    "subtitle": "Who you are, and how the harness connects.",
-    "connection": "Connection",
-    "offline": "Offline",
-    "offlineDesc": "Standalone — local models, nothing leaves this machine.",
-    "connected": "Connected",
-    "connectedDesc": "Link the company system — shared knowledge & sync.",
-    "soon": "soon",
-    "session": "Session",
-    "endpointPlaceholder": "Knowledge API URL",
-    "password": "Password",
-    "login": "Log in",
-    "register": "Register",
-    "logout": "Log out",
-    "loginError": "Could not connect: {{error}}",
+  "profile": {
+    "title": "Profile",
+    "subtitle": "Your display name and avatar, shown in the sidebar.",
     "avatar": "Avatar",
     "username": "Username",
     "usernamePlaceholder": "Shown in the sidebar"
@@ -300,10 +286,6 @@
   "storage": {
     "title": "Storage",
     "subtitle": "What your conversation history occupies, and where it lives. Delete sessions to free space.",
-    "backend": "Storage backend",
-    "backend_sqlite": "SQLite (desktop)",
-    "backend_idb": "IndexedDB (browser)",
-    "backend_local": "localStorage (limited, ~5 MB)",
     "totalUsed": "Sessions total (approx.)",
     "noWorkspace": "Chat (no workspace)",
     "deleteAll": "Delete all"

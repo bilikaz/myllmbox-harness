@@ -22,7 +22,7 @@ const cfg = () => getConfig();
 
 let dir: string;
 beforeAll(async () => {
-  dir = await mkdtemp(path.join(os.tmpdir(), "v84-tools-"));
+  dir = await mkdtemp(path.join(os.tmpdir(), "myllmbox-tools-"));
   await mkdir(path.join(dir, "src"), { recursive: true });
   await writeFile(path.join(dir, "src", "alpha.ts"), "const x = 1;\nhello world\n");
   await writeFile(path.join(dir, "src", "beta.md"), "# Beta\nhello there\n");

@@ -1,7 +1,6 @@
-// Containers — the unified chat / local-workspace / remote-workspace entity (the 3 sidebar
-// blocks). Replaces the old Workspace + the magic `workspaceId: null` "Chat" group: a chat is
-// just a container of type "chat", linked to no folder/VM. `type` is the WORKSPACE kind (fs / VM),
-// independent of where data is stored — storage is the active provider (ctx.storage swaps it).
+// Containers — the unified chat / local-workspace entity (the sidebar blocks). Replaces the old
+// Workspace + the magic `workspaceId: null` "Chat" group: a chat is just a container of type
+// "chat", linked to no folder. `type` is the WORKSPACE kind, independent of storage.
 
 import { useSyncExternalStore } from "react";
 
@@ -12,14 +11,14 @@ import type { Ctx } from "./ctx.ts";
 import { rootLog } from "../lib/logger/index.ts";
 import { errorMessage } from "../lib/errors.ts";
 
-export type ContainerType = "chat" | "local" | "remote";
+export type ContainerType = "chat" | "local";
 
 export interface Container {
   id: string;
   type: ContainerType;
   name: string;
   permissions: Record<string, unknown>; // JSON policy — the tool ceiling sessions inherit
-  config: Record<string, unknown>; // type-specific: {root} for local, {dockerName, root} for remote
+  config: Record<string, unknown>; // type-specific: {root} for local
   createdAt: number;
   updatedAt: number;
 }

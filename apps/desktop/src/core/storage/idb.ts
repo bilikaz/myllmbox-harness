@@ -8,7 +8,7 @@ import type { Message } from "../sessions/types.ts";
 import type { Agent } from "../agents.ts";
 import type { StorageRepos, CrudRepo, MessageRepo, MediaRepo, MediaRow, SettingRepo, SettingRow, PluginDataRepo, PluginDataRow } from "./types.ts";
 
-const DB_NAME = "v84-harness-data";
+const DB_NAME = "myllmbox-harness-data";
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {

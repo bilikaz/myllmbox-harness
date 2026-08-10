@@ -17,4 +17,4 @@ tasks execute is the [architecture hub](../ARCHITECTURE.md) + the
 
 | Task | Title | Status | Covers |
 | --- | --- | --- | --- |
-| _(none yet)_ | The first iteration creates `task1/`. | | |
+| [task1](task1/task.md) | Remove the remote backend: a local-only solo harness | **built · verified** (typecheck + 215 tests green; app-launch not run) · [report](task1/report.md) | supersedes ADR-0039/0040/0041/0071 · amends 0044/0045 · new local-only posture ADR |

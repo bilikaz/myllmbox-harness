@@ -3,14 +3,12 @@
 // housekeep): the agent interviews, generates into SCRATCH (generated-images/ — generation can never
 // touch curated folders), iterates to the USER's live approval (the user is the gate — every attempt
 // was seen and judged), and gathers the character-bible details; the `save` node then verifies the
-// approved path exists, promotes the image to avatars/, stamps the bible json, and writes the memory
-// sheet ONCE — invariants live in code, never in prompt discipline. The bible file IS the
-// registration: the avatars folder is the roster (files-as-ledger — no parallel registry to desync).
+// approved path exists, promotes the image to avatars/, and stamps the bible json ONCE — invariants
+// live in code, never in prompt discipline. The bible file IS the registration: the avatars folder is
+// the roster (files-as-ledger — no parallel registry to desync).
 
 import { BaseGraph, EXIT } from "../../../core/graph/base.ts";
 import type { GraphNode } from "../../../core/graph/types.ts";
-import { getContainer } from "../../../core/containers.ts";
-import { getSession } from "../../../core/sessions/store.ts";
 import { getConfig } from "../../../core/config/index.ts";
 import i18n from "../../../lib/i18n.ts";
 import { COMICS_DEFAULTS, COMICS_SLUG, type ComicsSettings } from "../manifest.ts";
@@ -108,22 +106,7 @@ export default class MascotGraph extends BaseGraph {
         // Writing the bible IS the registration — the avatars folder is the roster.
         const wr = await ctx.runTool("Write", { path: `/workspace/${settings().avatarsDir}/${safe}.json`, content: JSON.stringify(bible, null, 2) });
         if (!wr?.ok) ctx.break(i18n.t("plugins.comics.promoteFailed", { error: wr?.output ?? "no tool gateway" }));
-        // The SETTLED character sheet goes to memory ONCE, here — never by the agent mid-interview.
-        // Best-effort: memory offline never blocks the promotion.
-        const workspace = getContainer(getSession(ctx.sid)?.containerId)?.name;
-        const sheet = [
-          `Comic mascot "${r.name}"${workspace ? ` (workspace "${workspace}")` : ""} — image: ${dest}, bible: /workspace/${settings().avatarsDir}/${safe}.json`,
-          bible.look.description && `Look: ${bible.look.description}`,
-          bible.look.style && `Style: ${bible.look.style}`,
-          bible.look.proportions && `Proportions: ${bible.look.proportions}`,
-          bible.character.personality && `Personality: ${bible.character.personality}`,
-          bible.character.charisma && `Charisma: ${bible.character.charisma}`,
-          bible.character.emotions && `Emotions: ${bible.character.emotions}`,
-          bible.lineage && `Lineage: ${bible.lineage}`,
-        ]
-          .filter(Boolean)
-          .join("\n");
-        await ctx.runTool("SaveMemory", { content: sheet, scope: "private", category: "comics-mascots" });
+        // The settled character sheet is persisted in the workspace bible JSON (written above).
         // `show` makes the exit LOAD the promoted avatar into the chat — the result is seen.
         return { value: { ...bible, show: [dest] } };
       },

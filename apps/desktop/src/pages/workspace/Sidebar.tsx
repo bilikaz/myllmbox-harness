@@ -39,7 +39,7 @@ import {
   type Container,
   type ContainerType,
 } from "../../core/containers.ts";
-import { isConnected, useAccount } from "../../core/account.ts";
+import { useProfile } from "../../core/profile.ts";
 import { useOutsideClick } from "../../lib/hooks.ts";
 import { LANGUAGES, setLanguage } from "../../lib/i18n.ts";
 import { ContainerSettings } from "./ContainerSettings.tsx";
@@ -54,7 +54,7 @@ export function Sidebar() {
   const waiting = useWaiting();
   const containers = useContainers();
   const activeContainerId = useActiveContainerId();
-  const account = useAccount();
+  const profile = useProfile();
   const [menuOpen, setMenuOpen] = useState(false);
   // Which block's rows are in manage mode (rename/delete revealed) — scoped to one block at a time.
   const [editBlock, setEditBlock] = useState<ContainerType | null>(null);
@@ -102,15 +102,6 @@ export function Sidebar() {
     if (created) selectContainer(created.id);
   }
 
-  // Remote containers live on the server (placement remote), so they need a connection; the
-  // VM/Docker backing comes later — for now it's the container concept without execution.
-  async function addRemote() {
-    const name = window.prompt("Remote workspace name:") ?? "";
-    if (!name.trim()) return;
-    const created = await createContainer({ type: "remote", name: name.trim() });
-    if (created) selectContainer(created.id);
-  }
-
   // Delete a container and cascade to its sessions. Keep at least one container so a session
   // always has a home; the store re-points `active` if the active container is the one removed.
   function removeContainer(id: string) {
@@ -128,15 +119,13 @@ export function Sidebar() {
 
   useOutsideClick(menuOpen, menuRef, () => setMenuOpen(false));
 
-  // Local needs a host filesystem (desktop only — the native folder picker is the signal);
-  // Remote needs a connected account (the server holds it). Chat is always available.
+  // Local needs a host filesystem (desktop only — the native folder picker is the signal).
+  // Chat is always available.
   const isDesktop = !!ctx.api.pickFolder;
-  const connected = isConnected();
   const blocks: { type: ContainerType; label: string; onAdd: () => unknown }[] = [
     { type: "chat", label: t("sidebar.chats"), onAdd: addChat },
   ];
   if (isDesktop) blocks.push({ type: "local", label: t("sidebar.local"), onAdd: addLocalWorkspace });
-  if (connected) blocks.push({ type: "remote", label: t("sidebar.remote"), onAdd: addRemote });
 
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-neutral-200 bg-neutral-50">
@@ -258,9 +247,9 @@ export function Sidebar() {
           className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-neutral-200/50"
         >
           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-neutral-200 text-base">
-            {account.avatar}
+            {profile.avatar}
           </span>
-          <span className="flex-1 truncate text-neutral-800">{account.username}</span>
+          <span className="flex-1 truncate text-neutral-800">{profile.username}</span>
           <ChevronDown size={15} className="text-neutral-400" />
         </button>
       </div>
@@ -277,7 +266,7 @@ export function Sidebar() {
 }
 
 function iconForType(type: ContainerType): typeof FolderClosed {
-  return type === "chat" ? MessageSquare : type === "remote" ? Globe : FolderClosed;
+  return type === "chat" ? MessageSquare : FolderClosed;
 }
 
 // One sidebar row — a container or a session. Inline-renames when `renaming`; reveals
@@ -385,7 +374,7 @@ function UserMenu({ onClose }: { onClose: () => void }) {
         className={item}
         onClick={() => {
           onClose();
-          navigate("settings/account");
+          navigate("settings/profile");
         }}
       >
         <Settings size={16} /> {t("menu.settings")}

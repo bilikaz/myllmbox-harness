@@ -98,8 +98,7 @@ describe("assignment + resolution", () => {
     const ctx = initTestCtx();
     // Legacy/corrupt: services.main is a single object, not the ordered array resolvePools maps over.
     await ctx.storage.repos().settings.put({
-      key: "v84-harness:settings",
-      scope: "account",
+      key: "myllmbox-harness:settings",
       value: JSON.stringify({ providers: [], services: { main: { providerId: "x", modelId: "y" } } }),
     });
     await expect(hydrateConsumers()).resolves.toBeDefined();

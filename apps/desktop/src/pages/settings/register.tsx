@@ -1,7 +1,7 @@
 import { UserCircle, Plug, Image, Database, Blocks, Settings, LayoutGrid } from "lucide-react";
 
 import { register } from "../../lib/registry.ts";
-import { AccountSection } from "./AccountSection.tsx";
+import { ProfileSection } from "./ProfileSection.tsx";
 import { ProviderSection } from "./ProviderSection.tsx";
 import { ModelsSection } from "./ModelsSection.tsx";
 import { StorageSection } from "./StorageSection.tsx";
@@ -12,12 +12,12 @@ import { GallerySection } from "./GallerySection.tsx";
 register(
   {
     region: "settings",
-    id: "account",
-    title: "Account",
+    id: "profile",
+    title: "Profile",
     icon: UserCircle,
-    route: "settings/account",
+    route: "settings/profile",
     order: 0,
-    render: () => <AccountSection />,
+    render: () => <ProfileSection />,
   },
   {
     region: "settings",

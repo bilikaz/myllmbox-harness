@@ -17,7 +17,6 @@ export function StorageSection() {
   const { t } = useTranslation();
   const sessions = useSessions();
   const containers = useContainers();
-  const backend = useCtx().storage.connected ? "remote" : "local";
 
   const groups: { key: string; name: string; sessions: Session[] }[] = containers
     .map((c) => ({ key: c.id, name: c.name, sessions: sessions.filter((s) => s.containerId === c.id) }))
@@ -30,11 +29,7 @@ export function StorageSection() {
       <h2 className="text-lg font-semibold text-neutral-900">{t("storage.title")}</h2>
       <p className="mt-1 text-sm text-neutral-500">{t("storage.subtitle")}</p>
 
-      <div className="mt-4 flex items-center justify-between border-b border-neutral-200 pb-3 text-sm">
-        <span className="text-neutral-500">{t("storage.backend")}</span>
-        <span className="font-medium text-neutral-800">{t(`storage.backend_${backend}`, { defaultValue: backend })}</span>
-      </div>
-      <div className="flex items-center justify-between border-b border-neutral-200 py-3 text-sm">
+      <div className="mt-4 flex items-center justify-between border-b border-neutral-200 py-3 text-sm">
         <span className="text-neutral-500">{t("storage.totalUsed")}</span>
         <span className="font-medium text-neutral-800">{fmtBytes(total)}</span>
       </div>

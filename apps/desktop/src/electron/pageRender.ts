@@ -9,7 +9,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 export async function renderPageOffscreen(html: string, size: { width: number; height: number }): Promise<string> {
-  const file = path.join(app.getPath("temp"), `v84-gallery-${randomUUID()}.html`);
+  const file = path.join(app.getPath("temp"), `myllmbox-gallery-${randomUUID()}.html`);
   await writeFile(file, html, "utf8");
   // Window creation clamps to the screen's work area — a 2970px page on a 1080p display gets its
   // bottom cut. enableLargerThanScreen + an explicit post-create setContentSize lift the clamp for

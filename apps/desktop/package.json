@@ -1,5 +1,5 @@
 {
-  "name": "@v84-harness/desktop",
+  "name": "@myllmbox-harness/desktop",
   "version": "0.2.0",
   "private": true,
   "license": "AGPL-3.0-only",
@@ -20,8 +20,8 @@
     "test:watch": "vitest"
   },
   "build": {
-    "appId": "eu.v84.harness",
-    "productName": "V84 Harness",
+    "appId": "eu.myllmbox.harness",
+    "productName": "MyLLMBox Harness",
     "npmRebuild": false,
     "directories": {
       "output": "release",
