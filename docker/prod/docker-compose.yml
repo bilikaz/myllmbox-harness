@@ -1,0 +1,35 @@
+# PROD stack for the MyLLMBox Harness — the static web build behind a Cloudflare token tunnel.
+#
+#   ui          — nginx serving the built SPA, published to 127.0.0.1:8011 (localhost only; the box
+#                 never exposes it directly — the tunnel is the only public path).
+#   cloudflared — a token-managed Cloudflare tunnel (dials OUT, no inbound port). It runs on the HOST
+#                 network so the tunnel's configured origin — Service http://localhost:8011, set in the
+#                 CF Zero Trust dashboard — resolves to the UI's published host port. The public
+#                 hostname (harness.myllmbox.com → http://localhost:8011) is mapped Cloudflare-side.
+#
+# (Tidier alternative if you ever simplify CF-side: set the Service to http://ui:80, put both services
+# on one compose network, and drop network_mode/host + the 8011 publish.)
+#
+# First deploy: create the tunnel in the CF dashboard, add the public hostname, put its token in
+# docker/prod/.env (TUNNEL_TOKEN=…). See .env.example.
+
+name: myllmbox-harness-prod
+
+services:
+  ui:
+    container_name: myllmbox-harness-ui
+    image: myllmbox-harness-ui:latest
+    build:
+      context: ../..
+      dockerfile: docker/prod/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8011:80"
+
+  cloudflared:
+    container_name: myllmbox-harness-cloudflared
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    network_mode: host
+    command: ["tunnel", "--no-autoupdate", "run", "--token", "${TUNNEL_TOKEN:?set TUNNEL_TOKEN in docker/prod/.env}"]
+    depends_on: [ui]
