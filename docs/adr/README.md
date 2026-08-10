@@ -1,0 +1,130 @@
+# Architecture Decision Records
+
+Dated, immutable log (see [conventions/documentation.md](../conventions/documentation.md)).
+One decision per ADR; supersede, don't rewrite. Scope is gated by
+[ADR-0000](0000-adr-scope.md): architectural decisions only — bug fixes and
+procedures don't land here. The map of current structure is
+[../ARCHITECTURE.md](../ARCHITECTURE.md); portable rules are
+[../conventions/](../conventions/).
+
+A fully-superseded ADR that nothing current depends on is moved to [archive/](archive/),
+leaving a same-name stub at its original path that redirects to the archived original and
+the successor (documentation.md rule 2) — inbound links keep resolving, the body stops
+loading. Its index row below stays.
+
+| ADR | Decision | Status |
+| --- | --- | --- |
+| [0000](0000-adr-scope.md) | What lands in this log: architectural decisions only (+ the one recorded process exception — the independent drift review) | accepted |
+| [0001](0001-dual-target-build.md) | Dual-target build: pure web Vite + Electron from one renderer | accepted |
+| [0002](0002-typed-ipc-bridge.md) | Typed IPC bridge — `IPC` channel constants + `HarnessApi` | accepted |
+| [0003](0003-host-agnostic-core.md) | Host-agnostic `core/`, migrated from `lib/` feature-by-feature | accepted (migration complete) |
+| [0004](0004-store-pattern.md) | `createStore` factory + `useSyncExternalStore` hooks | superseded by 0037 → archived |
+| [0005](0005-event-bus.md) | Typed, domain-scoped event bus via declaration merging | accepted |
+| [0006](0006-provider-abstraction.md) | Provider adapters behind a unified `StreamEvent` stream | accepted (registry clause superseded by 0029) |
+| [0007](0007-tool-system.md) | Tool system: gated vs permissionless, virtual root, never-throw | accepted (virtual-root marker + registration superseded by 0033) |
+| [0008](0008-ui-registry-routing.md) | UI contribution registry (Slot regions) + hash router | accepted |
+| [0009](0009-i18n.md) | i18n via i18next, en/lt key parity | accepted |
+| [0010](0010-adopt-shared-conventions.md) | Adopt the shared conventions set (with recorded deviations) | accepted |
+| [0011](0011-contribute-ui-conventions.md) | Contribute UI-layer conventions to the shared set | accepted |
+| [0012](0012-sessions-dual-tier-persistence.md) | Sessions dual-tier persistence (localStorage + IDB) | superseded by 0021 → archived |
+| [0013](0013-approval-promise-bridge.md) | Approval Promise bridge driver ↔ UI | accepted |
+| [0014](0014-stop-semantics-and-tool-cancellation.md) | Stop semantics + tool cancellation over IPC | accepted |
+| [0015](0015-prompt-assets.md) | Prompt assets: English-only `pt()` catalog, outside i18n | accepted |
+| [0016](0016-workspace-isolation-field.md) | Workspace isolation field (`worktree` \| `direct`) | **debatable — no concept yet** |
+| [0017](0017-storage-port-with-detected-backends.md) | Storage port with detected backends (SQLite > IDB > localStorage) | superseded by 0035 → archived |
+| [0018](0018-capability-gated-media-tools.md) | Capability-gated media tools (LoadImage/LoadVideo) + unified media feedback | accepted (tool names refined by 0033) |
+| [0019](0019-reference-stable-transcript.md) | Reference-stable messages + memoized transcript leaves | accepted |
+| [0020](0020-persist-at-turn-completion.md) | Persistence at turn completion only | superseded by 0072 |
+| [0021](0021-granular-session-persistence.md) | Granular session persistence: index / messages / media keys | superseded by 0043 → archived |
+| [0022](0022-subagent-orchestration.md) | Sub-agent orchestration: child sessions + ListAgents/RunAgent pair | accepted (extended into a standing team by 0058) |
+| [0023](0023-agent-definition-binding-and-ceiling.md) | Agent definition: workspace binding toggle + per-agent tool ceiling | accepted (placement clause superseded by 0026) |
+| [0024](0024-agent-runs-through-composer.md) | Agent runs go through the composer (pseudo-session priming) | accepted |
+| [0025](0025-media-resend-window.md) | Media resend window + aligned per-item caps | accepted |
+| [0026](0026-agent-session-placement-vs-capability.md) | Agent sessions: placement follows launch context, capability masked separately + unlink | accepted |
+| [0027](0027-per-model-image-pixel-cap.md) | Images model-checked by dimensions (`imageMaxDim`, renderer downscaling); byte caps become transport bounds | accepted |
+| [0028](0028-llm-client-service-calls.md) | One llm client: service-named calls over an injected resolver (`LLMConfigResolver`); heal cycle; tool calls stay engine-side | accepted (ConfigSource renamed `LLMConfigResolver`; leased `target` + injected `SlotProvider` added by 0066) |
+| [0029](0029-provider-classes-folder-factory.md) | Provider classes resolved by the folder-layout factory; response handlers are response-side only | accepted |
+| [0030](0030-unified-call-target.md) | One model-data format held end to end (stores included, no migrations) | accepted (CallTarget → `LLMConfig` / ownership moved to config by 0031) |
+| [0031](0031-config-sole-source-of-truth.md) | Config as the sole source of truth — domains under one roof, owners push | accepted |
+| [0032](0032-ctx-main-data-carrier.md) | Ctx — the one data carrier (config + llm + storage + tool gateway + host api + sessions) | accepted |
+| [0033](0033-tools-registry-folder-by-permission.md) | Tools — host-agnostic registry, dynamic permission tiers, per-platform execution | accepted |
+| [0034](0034-platform-hosts-over-agnostic-core.md) | Platform hosts (electron / web) over a host-agnostic core + shared renderer | accepted |
+| [0035](0035-storage-engine.md) | Storage engine — backend embedded, persistence owned (supersedes 0017) | superseded by 0043 / 0044 → archived |
+| [0036](0036-host-capability-surface.md) | Host capability surface — `ctx.api`, platform-injected, gated on presence | accepted |
+| [0037](0037-reactive-consumer-over-injected-storage.md) | Reactive `Consumer` over injected storage (supersedes 0004; `createStore`/`lib/store.ts` deleted) | accepted |
+| [0038](0038-storage-backend-swappable-at-runtime.md) | Storage backend swappable at runtime — local baseline + remote | superseded by 0044 → archived |
+| [0039](0039-account-local-store-and-connection-lifecycle.md) | `account` — the lone local store, connection lifecycle, renderer-side memory tool tier | accepted |
+| [0040](0040-knowledge-remote-service.md) | `apps/knowledge` — the remote service (Hono + MariaDB + OpenSearch + Inngest; auth; `/data` + `/kb` + `/inngest`) | accepted |
+| [0041](0041-knowledgebase-plane.md) | Knowledgebase — all-OpenSearch, nested chunks, hybrid sparse+dense, fire-and-forget ingest | accepted |
+| [0042](0042-unified-settings-registry.md) | Unified Settings registry — providers/models/services, `config.llm` derived, media subsumed (refines 0018) | accepted (services → per-service priority pools by 0065) |
+| [0043](0043-per-entity-repos.md) | Per-entity storage tables + `StorageRepos` (KV substrate retired; supersedes 0035, 0021) | accepted |
+| [0044](0044-storage-engine-provider-swap.md) | `StorageEngine` — provider swap with a machine-local lane (`repos()` vs `localRepos()`; supersedes 0038) | accepted |
+| [0045](0045-machine-local-vs-account-synced.md) | Machine-local vs account-synced state (`Consumer.synced`; refines 0037, 0039, 0042) | accepted |
+| [0046](0046-typed-containers.md) | Typed containers unify chat + workspace (kills the null-"Chat" sentinel) | accepted |
+| [0047](0047-first-party-in-tree-plugins.md) | First-party, in-tree plugin system (slug identity, config-as-truth, drops the `plugins` table) | accepted |
+| [0048](0048-tool-ctx-config-carrier.md) | Tools constructed with a config getter; the LLM client is derived from it (amends 0033) | accepted |
+| [0049](0049-plugin-service-bridge.md) | Plugin service bridge — RPC + main→renderer event push + install/uninstall lifecycle | accepted |
+| [0050](0050-engine-tool-tier.md) | Engine tool tier — driver-level tools (sub-agents + browser) discovered + gated as a tier (amends 0022) | accepted |
+| [0051](0051-browser-windows-session-owned.md) | Browser windows — session-owned, ephemeral, agent-driven (short ids, capturePage, load push, comment routing) | accepted |
+| [0052](0052-system-prompt-layering.md) | System-prompt layering — overridable base (agent→workspace→global→default) + appended capability blocks (incl. plugin systemPrompt) | accepted |
+| [0053](0053-browser-read-readiness.md) | Browser read-readiness — "loaded" = document-complete + network-idle settle + fixed grace (refines 0051) | accepted |
+| [0054](0054-browser-capture-cdp-multishot.md) | Browser capture — CDP `fromSurface:false` (hidden/0×0 windows) + multi-shot scroll-and-shoot; `capturePage` → `string[]` (supersedes 0051's native capture) | accepted |
+| [0055](0055-browser-read-delivery.md) | Browser read delivery — `Browser` returns the page (shared `readWindow`) + per-window op lock; snapshot always shown (refines 0051) | accepted |
+| [0056](0056-portable-workspace-tools.md) | Portable workspace tools — drop Bash, pure-Node Grep, add Find/Move/Copy/Delete, Read `offset` (amends 0033) | accepted |
+| [0057](0057-developer-gated-script-execution.md) | RunScript — out-of-process, developer-gated code execution + `developerMode` flag | accepted |
+| [0058](0058-conversational-sub-agent-orchestration.md) | Conversational sub-agent orchestration — a standing team (aliases, ActiveAgents/AskAgent/ResumeAgent), typed outcomes, resume-from-history (supersedes/extends 0022) | accepted (async delivery added by 0060; alias clause superseded by 0061) |
+| [0059](0059-builtin-general-agent.md) | Built-in universal General agent — always summonable, inherits the caller's context via its container | accepted |
+| [0060](0060-async-subagent-delivery.md) | Async sub-agent orchestration + the settle-event delivery model (`asyncAgents`, `awaitSettled`, `getAgentContent`, user-drivable children, shared `fanOut`) | accepted (per-model concurrency cap added by 0066) |
+| [0061](0061-subagent-alias-from-title.md) | Sub-agent alias from the title `#n` suffix (supersedes 0058's stored-alias clause) | accepted |
+| [0062](0062-runtime-registered-tools.md) | Runtime-registered tools — the registry as a dynamic tool source (`register`/`unregister`; amends 0033, 0049) | accepted |
+| [0063](0063-mcp-client-plugin.md) | MCP client as a first-party plugin — client plane, tools-only, stdio + HTTP, `MCP_<Server>_<Tool>` | accepted |
+| [0064](0064-mcp-oauth.md) | MCP OAuth — auth-code + PKCE, DCR or pre-registered app, in-app loopback window, machine-local tokens (refines 0063) | accepted |
+| [0065](0065-per-service-priority-pools.md) | Per-service priority pools + per-model concurrency caps (`services` → ordered lists, `c`/reserve/rating; refines 0042) | accepted |
+| [0066](0066-concurrency-runner.md) | Concurrency runner — turn-held slot leases + provider affinity (refines 0028/0032/0060; resolves the local-LLM eviction item) | accepted |
+| [0067](0067-graph-orchestration-engine.md) | Graph orchestration engine — event-driven named-node graphs (Start/End, goTo/splitTo/goToAll, arrival-driven joins) + the Select primitive | accepted (control model superseded by 0069) |
+| [0068](0068-plugin-agents-code-registry.md) | Plugin agents as a runtime-gated code registry (`agents.json` globbed, gated by enabled — not materialized into the user store) | accepted |
+| [0069](0069-message-driven-graph-control.md) | Message-driven graph control — `start`/`continue`/`<node>` command messages (no self-driving), reserved `exit` node with ```json output, node-validated `ctx.break` → park/resume | accepted |
+| [0070](0070-agent-tool-grounding-wildcard.md) | Agent tool grounding — a `*` wildcard ceiling in `AgentTools` (`{ "*": 0, … }` restricts a head to only the tools it lists) | accepted |
+| [0071](0071-remote-mirrors-harness-shapes.md) | Remote storage mirrors the harness canonical shapes (desktop is source of truth; typed-column backends thread every field; compile-time parity guard; placement deferred) | accepted |
+| [0072](0072-commit-on-landing.md) | Incremental message persistence — commit each message as it lands, not a turn-end whole-transcript write (supersedes 0020); complete-exchange only; ULID message ids | accepted |
+| [0073](0073-subagent-restart-recovery.md) | Sub-agent restart recovery — durable `delivered` watermark + boot `reconcile()` (async runs resume after a reload); async is the default orchestration mode | accepted |
+| [0074](0074-session-identity-vs-runtime.md) | Session identity vs. runtime — churning fields move to `session.meta`, stored whole in one `meta_data` JSON column (refines 0071) | accepted |
+| [0075](0075-breaking-change-data-reset.md) | Breaking data changes reset, not migrate — MySQL wipe + canonical `001`, local `DATA_VERSION` gate (applies canonical-shapes rule 5) | accepted |
+| [0076](0076-image-edit-service-and-referenceable-images.md) | Image editing: `imageEdit` as its own service; `ImageCompose` (prompt + references); workspace-saved, model-named generated images (refuse-on-collision, two-phase); repeated-`image` multipart wire | accepted |
+| [0077](0077-media-reference-aliases.md) | Media reference aliases — per-session `img-N`/`vid-N` stamped at landing (counter in `session.meta`), in-band annotations, engine pre-resolution into `ToolCallRequest.mediaRefs` | accepted |
+| [0078](0078-compaction-as-send-boundary.md) | Compaction is a send boundary, not a rewrite — summary appended, send = last summary + tail, transcript/media never destroyed (amends 0072's compaction clause) | accepted |
+| [0079](0079-session-loop-architecture.md) | One supervised session loop — drivers, contract-in-loop, typed faults + one reaction table, settlement events + persisted waits, pending inbox, boot=resume, `runContract` (supersedes the modelTurn/awaitHead/onDialogTurn machinery) | accepted |
+| [0080](0080-graphs-as-response-producers.md) | Graphs are response producers — commands as prompt, nodes emit real Call/Select tool calls, park=yield, cursor revival; GraphEngine is a thin router (supersedes 0067's executor mechanics) | accepted |
+| [0081](0081-gallery-core-capability.md) | Gallery is core — self-described layout catalog as data, one A4 page format, render port, GalleryOptions/GalleryCompose | accepted |
+| [0082](0082-generation-jobs-and-budgeted-tools.md) | Generation jobs + budgeted generate tools — files-as-ledger attempts, silent budgets, scratch/curated split (graphs promote), the structured reference law, task=data | accepted |
+| [0083](0083-total-agent-grounding.md) | The agent tools ceiling binds EVERY tier — permissionless and engine tools included; plugin agents catalog-listed opt-in | accepted |
+
+## Needs review / important missing parts
+
+Decisions or gaps that are recorded but **not settled** — revisit before the
+related area grows. Resolving one means writing/superseding an ADR and removing
+it from this list.
+
+| Item | Where recorded | What's missing |
+| --- | --- | --- |
+| Workspace isolation (`worktree`) | [ADR-0016](0016-workspace-isolation-field.md) | The entire concept: worktree lifecycle, merge-back, non-git workspaces. Field is settable but read by nothing. |
+| Storage quota warning | [ADR-0012](0012-sessions-dual-tier-persistence.md) | Manual pruning shipped (Settings → Storage: per-workspace/session usage + delete). Still missing: a user-facing warning when a persist write fails (today it's only a logged `persist_failed`). |
+| Video job orphaning on cancel/quit | [ADR-0014](0014-stop-semantics-and-tool-cancellation.md) | Stop ends polling but the server job keeps running; no job-id persistence for resume or cleanup (endpoint has no cancel API). |
+| Bridge startup handshake | [ADR-0002](0002-typed-ipc-bridge.md) | 18 IPC channels now (was 6 when "revisit if it grows" was written; +2 for the plugin bridge [ADR-0049](0049-plugin-service-bridge.md), +2 for the browser fleet's `capturePage`/`browserEvent` [ADR-0051](0051-browser-windows-session-owned.md)); a missing handler still hangs the invoke silently. A startup ping would catch it. |
+| Plugin service lifecycle/dispose depth | [ADR-0049](0049-plugin-service-bridge.md) | `install`/`uninstall` exist, but there's no teardown on app quit (process death is relied on) and no per-window scoping; fine for single-window desktop, revisit if a plugin holds resources that need graceful release. |
+| Tests/typecheck not in CI | conventions/testing.md | `.github/workflows/review.yml` runs the reviewer gate only; nothing runs `pnpm typecheck` / `pnpm test` on push. |
+| Child context growth unbounded | [ADR-0058](0058-conversational-sub-agent-orchestration.md), [/TODO.md](../../TODO.md) | The concurrency cap + provider affinity ([ADR-0066](0066-concurrency-runner.md)) + the server keep-alive ping closed the eviction/stream-reset failure. What remains is an **optimization**: bound a child's prefix growth so a re-prefill (when it does happen) is cheaper. Not a live failure. |
+
+Resolved since first written: reasoning config beyond OpenAI-compatible
+(ADR-0006 — effort now maps to all three providers), the `lib/` → `core/`
+migration tail (settings/media/agents moved to `core/`), conventions upstream
+sync (copied to the reviewer repo), desktop storage quota ceiling (ADR-0017),
+storage growth pruning (manual, Settings → Storage), and the `Session.steps`
+progress DAG (removed — ToolCard links + live child sessions are the progress
+view, ADR-0022), and client-side media downscaling (per-model pixel cap,
+stored copy is the downscaled one — ADR-0027), and the account "Connected" mode
+(now designed and built — the `account` store + connection lifecycle in
+ADR-0039, with `apps/knowledge` as the backend in ADR-0040), and the local-LLM
+prefill/eviction failure (the concurrency runner — per-model `c` + priority pools +
+provider affinity, ADR-0065/0066 — plus a server-side keep-alive ping; only the
+child-context-growth optimization remains).

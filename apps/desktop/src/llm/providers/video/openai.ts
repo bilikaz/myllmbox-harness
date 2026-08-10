@@ -1,0 +1,30 @@
+// The OpenAI-style video jobs dialect (the Cosmos container's /videos flow).
+
+import type { GenParams, MediaOut } from "../../types.ts";
+import { bytesToB64 } from "../../../lib/dataUrl.ts";
+import { BaseVideoProvider, type VideoJob } from "./base.ts";
+
+export class Provider extends BaseVideoProvider {
+  protected async submit(prompt: string, p: GenParams): Promise<VideoJob> {
+    const form = new FormData();
+    form.set("prompt", prompt);
+    if (this.target.model.id) form.set("model", this.target.model.id);
+    if (p.w && p.h) form.set("size", `${p.w}x${p.h}`);
+    if (p.numFrames !== undefined) form.set("num_frames", String(p.numFrames));
+    if (p.fps !== undefined) form.set("fps", String(p.fps));
+    if (p.seed !== undefined) form.set("seed", String(p.seed));
+    const res = await this.request("/videos", { what: "video submit", form });
+    return (await res.json()) as VideoJob;
+  }
+
+  protected async poll(jobId: string): Promise<VideoJob> {
+    const res = await this.request(`/videos/${jobId}`, { what: "video poll" });
+    return (await res.json()) as VideoJob;
+  }
+
+  protected async content(jobId: string): Promise<MediaOut> {
+    const res = await this.request(`/videos/${jobId}/content`, { what: "video content" });
+    const ct = res.headers.get("content-type") || "";
+    return { b64: bytesToB64(new Uint8Array(await res.arrayBuffer())), mime: ct.includes("video") ? ct : "video/mp4" };
+  }
+}

@@ -1,0 +1,43 @@
+import { useEffect, useState, type RefObject } from "react";
+
+export function useEscapeKey(active: boolean, onEscape: () => void): void {
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onEscape();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [active, onEscape]);
+}
+
+export function useOutsideClick(active: boolean, ref: RefObject<HTMLElement | null>, onOutside: () => void): void {
+  useEffect(() => {
+    if (!active) return;
+    function onDown(e: PointerEvent) {
+      if (!ref.current?.contains(e.target as Node)) onOutside();
+    }
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+    // [active] only by design: ref is stable and read at event time; onOutside is caller-stable, so
+    // re-subscribing on its identity would only churn the listener.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+}
+
+export function useDetection(
+  probe: () => Promise<{ ok: boolean; count: number; error?: string }>,
+  format: (r: { ok: boolean; count: number; error?: string }) => string,
+): { detecting: boolean; msg: string; detect: () => Promise<void> } {
+  const [detecting, setDetecting] = useState(false);
+  const [msg, setMsg] = useState("");
+  async function detect(): Promise<void> {
+    if (detecting) return;
+    setDetecting(true);
+    setMsg("");
+    const r = await probe();
+    setDetecting(false);
+    setMsg(format(r));
+  }
+  return { detecting, msg, detect };
+}

@@ -1,0 +1,36 @@
+{
+  "name": "v84-harness",
+  "version": "0.2.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "postinstall": "node -e \"if (!process.env.ELECTRON_SKIP_BINARY_DOWNLOAD) require('electron')\"",
+    "typecheck": "pnpm -r typecheck",
+    "dev:desktop": "pnpm --filter @v84-harness/desktop dev",
+    "dev:desktop:electron": "pnpm --filter @v84-harness/desktop dev:electron",
+    "build:desktop": "pnpm --filter @v84-harness/desktop build",
+    "build:desktop:electron": "pnpm --filter @v84-harness/desktop build:electron",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "@bilikaz/code-reviewer": "^0.2.1",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "electron-builder",
+      "esbuild"
+    ],
+    "ignoredBuiltDependencies": [
+      "electron-winstaller",
+      "protobufjs"
+    ]
+  }
+}
