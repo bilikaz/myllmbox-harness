@@ -33,7 +33,7 @@ export async function nameSession(ctx: Ctx, sid: string): Promise<void> {
     // thinking, so give a real budget — thinking + the short title must both fit,
     // or the title comes back empty.
     ({ text: title, thinkingChars } = await ctx.llm.call({
-      service: "main",
+      service: "text",
       messages,
       system: session.system || undefined,
       params: { reasoningEffort: "off", maxTokens: getAppConfig().session.titleMaxTokens },

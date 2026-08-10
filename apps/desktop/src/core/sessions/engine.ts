@@ -7,7 +7,6 @@ import { getAppConfig } from "../config/index.ts";
 import { denyApprovalsForSession } from "../approvals.ts";
 import { type Agent } from "../agents.ts";
 import { getActiveContainerId, getContainer } from "../containers.ts";
-import { isConnected } from "../account.ts";
 import { type ToolName, type ToolPermission } from "../tools/types.ts";
 import { deliveryNudge } from "../prompts.ts";
 import { GET_AGENT_CONTENT, aliasOf, childrenOf, collectAgentContent } from "../tools/helpers/agents/catalog.ts";
@@ -386,7 +385,7 @@ export class SessionEngine {
   private modelTurn(sid: string, opts: SendOptions, meta: { firstExchange: boolean; autoName: boolean; userText: string }): Promise<TurnResult> {
     if (!this.tracedConfig) {
       this.tracedConfig = true;
-      llmLog.debug("config", { session: getAppConfig().session, connected: isConnected() });
+      llmLog.debug("config", { session: getAppConfig().session });
     }
     const controller = new AbortController();
     const loop = new LlmSessionLoop(

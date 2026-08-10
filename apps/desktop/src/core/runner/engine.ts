@@ -4,25 +4,25 @@
 // injected, so it unit-tests without React or a real bus. See implementation.md.
 //
 // Two acquisition shapes share ONE per-model in-flight counter (the universal `c`):
-//   • text turns (main / subAgent) — affinity on, held across the whole turn (KV-warm);
-//   • everything else (media gen/rec, naming, compaction) — affinity off, held for the
-//     single call. Both priority-fill their service's pool, top tier first.
+//   • text turns (the `text` pool — foreground chat + background sub-agent runs) — affinity on,
+//     held across the whole turn (KV-warm); a background run is capped at the open band (c − reserve);
+//   • everything else (media gen/rec, naming, compaction) — affinity off, held for the single call.
+//     Both priority-fill their service's pool, top tier first.
 
 import type { LLMConfig } from "../config/llm.ts";
 import type { ModelService } from "../../llm/types.ts";
 import { modelKey, type RunnerPools, type RunnerSlot } from "../config/pools.ts";
 
-// The two text-runner roles — the services whose pools carry reserve + affinity.
-export type RunnerRole = "main" | "subAgent";
-
 // A held slot: identity (`id` — the surfaced slot token), the model it pins to, and the
-// resolved target to call. A text turn reuses it across steps; a call holds it once.
+// resolved target to call. `background` marks a sub-agent run (counts against the open band, frees a
+// child seat on release). A text turn reuses it across steps; a call holds it once.
 export interface Lease {
   id: string;
   sessionId: string;
   service: ModelService;
   modelKey: string;
   config: LLMConfig;
+  background: boolean;
 }
 
 export type RunnerEvent =
@@ -32,6 +32,7 @@ export type RunnerEvent =
 
 export interface AcquireOpts {
   affinity?: boolean; // keep a provider binding for KV warmth (text turns); default by service
+  background?: boolean; // a background sub-agent run on the `text` pool — capped at the open band (c − reserve)
   signal?: AbortSignal;
 }
 
@@ -59,6 +60,7 @@ interface Waiter {
   id: string;
   service: ModelService;
   affinity: boolean;
+  background: boolean;
   contextSize: number;
   preferredKey?: string; // a warm bound provider to wait on (favored); undefined = roam any
   deadline: number; // past this, a warm waiter roams freely (its binding TTL)
@@ -68,7 +70,7 @@ interface Waiter {
   onAbort?: () => void;
 }
 
-const affinityDefault = (service: ModelService): boolean => service === "main" || service === "subAgent";
+const affinityDefault = (service: ModelService): boolean => service === "text";
 
 export class RunnerEngine {
   private readonly counts = new Map<string, Counts>(); // modelKey → live in-flight
@@ -119,23 +121,25 @@ export class RunnerEngine {
     return this.counts.get(key) ?? { total: 0, child: 0 };
   }
 
-  // A slot has a free seat for this service: under its cap, and for sub-agents under its open band.
-  private free(slot: RunnerSlot, service: ModelService): boolean {
+  // A slot has a free seat: under its cap, and for a background run under its open band (c − reserve).
+  private free(slot: RunnerSlot, background: boolean): boolean {
     const cur = this.cnt(modelKey(slot));
     if (cur.total >= slot.c) return false;
     // clamp: a stored reserve > c would make the band negative and silently block every child on this model.
-    if (service === "subAgent" && cur.child >= Math.max(0, slot.c - slot.reserve)) return false;
+    if (background && cur.child >= Math.max(0, slot.c - slot.reserve)) return false;
     return true;
   }
 
   // Acquire a slot for `id` on `service`'s pool. Reuses a still-held lease; otherwise runs the
   // warm/cold placement (see the acquire flowchart). Resolves null when aborted while queued, or
-  // when the pool is empty (caller falls back). `contextSize` gates warm-wait vs roam.
+  // when the pool is empty (caller falls back). `contextSize` gates warm-wait vs roam;
+  // `opts.background` marks a sub-agent run (capped at the open band on the `text` pool).
   acquire(service: ModelService, id: string, contextSize = 0, opts: AcquireOpts = {}): Promise<Lease | null> {
     const held = this.live.get(id);
     if (held) return Promise.resolve(held);
 
     const affinity = opts.affinity ?? affinityDefault(service);
+    const background = opts.background ?? false;
     const pool = this.poolFor(service);
     if (!pool.length) return Promise.resolve(null);
 
@@ -145,16 +149,16 @@ export class RunnerEngine {
     if (warm) {
       const bound = pool.find((s) => modelKey(s) === warm);
       if (bound) {
-        if (this.free(bound, service)) return Promise.resolve(this.grant(bound, id, service, affinity));
+        if (this.free(bound, background)) return Promise.resolve(this.grant(bound, id, service, affinity, background));
         // bound full: a big context waits on it (KV worth protecting); a small one roams.
-        if (contextSize >= this.deps.kvThreshold()) return this.wait(service, id, affinity, contextSize, warm, binding!.expiresAt, opts.signal);
+        if (contextSize >= this.deps.kvThreshold()) return this.wait(service, id, affinity, background, contextSize, warm, binding!.expiresAt, opts.signal);
       }
     }
 
     // Cold, or a small warm session that's roaming: priority-fill, top of the pool first.
-    const slot = pool.find((s) => this.free(s, service));
-    if (slot) return Promise.resolve(this.grant(slot, id, service, affinity));
-    return this.wait(service, id, affinity, contextSize, undefined, this.now(), opts.signal);
+    const slot = pool.find((s) => this.free(s, background));
+    if (slot) return Promise.resolve(this.grant(slot, id, service, affinity, background));
+    return this.wait(service, id, affinity, background, contextSize, undefined, this.now(), opts.signal);
   }
 
   // Release a held slot (turn end / parking, or a call settling). A text binding is kept and its
@@ -164,7 +168,7 @@ export class RunnerEngine {
     if (!lease) return;
     this.live.delete(id);
     const cur = this.cnt(lease.modelKey);
-    this.counts.set(lease.modelKey, { total: Math.max(0, cur.total - 1), child: Math.max(0, cur.child - (lease.service === "subAgent" ? 1 : 0)) });
+    this.counts.set(lease.modelKey, { total: Math.max(0, cur.total - 1), child: Math.max(0, cur.child - (lease.background ? 1 : 0)) });
     if (this.bindings.has(id)) this.bindings.set(id, { modelKey: lease.modelKey, expiresAt: this.now() + this.deps.ttlMs() });
     this.emit({ type: "released", sessionId: lease.sessionId, leaseId: lease.id });
     this.pump();
@@ -192,7 +196,7 @@ export class RunnerEngine {
       const boundFree = (w: Waiter): RunnerSlot | undefined => {
         if (!(w.preferredKey && now < w.deadline)) return undefined;
         const bound = this.poolFor(w.service).find((s) => modelKey(s) === w.preferredKey);
-        return bound && this.free(bound, w.service) ? bound : undefined;
+        return bound && this.free(bound, w.background) ? bound : undefined;
       };
       // Pass 1 — a warm waiter whose bound provider is free wins, wherever it sits (favoring).
       let idx = this.queue.findIndex((w) => boundFree(w));
@@ -202,15 +206,15 @@ export class RunnerEngine {
         idx = this.queue.findIndex((w) => {
           const pool = this.poolFor(w.service);
           if (w.preferredKey && now < w.deadline && pool.some((s) => modelKey(s) === w.preferredKey)) return false;
-          return pool.some((s) => this.free(s, w.service));
+          return pool.some((s) => this.free(s, w.background));
         });
       if (idx < 0) return;
       const w = this.queue[idx];
-      const slot = boundFree(w) ?? this.poolFor(w.service).find((s) => this.free(s, w.service));
+      const slot = boundFree(w) ?? this.poolFor(w.service).find((s) => this.free(s, w.background));
       if (!slot) return;
       this.queue.splice(idx, 1);
       if (w.signal && w.onAbort) w.signal.removeEventListener("abort", w.onAbort);
-      w.resolve(this.grant(slot, w.id, w.service, w.affinity, w.leaseId));
+      w.resolve(this.grant(slot, w.id, w.service, w.affinity, w.background, w.leaseId));
     }
   }
 
@@ -225,22 +229,22 @@ export class RunnerEngine {
     return this.queue.some((w) => w.id === id);
   }
 
-  private grant(slot: RunnerSlot, id: string, service: ModelService, affinity: boolean, leaseId?: string): Lease {
+  private grant(slot: RunnerSlot, id: string, service: ModelService, affinity: boolean, background: boolean, leaseId?: string): Lease {
     const key = modelKey(slot);
     const cur = this.cnt(key);
-    this.counts.set(key, { total: cur.total + 1, child: cur.child + (service === "subAgent" ? 1 : 0) });
-    const lease: Lease = { id: leaseId ?? this.newId(), sessionId: id, service, modelKey: key, config: slot.config };
+    this.counts.set(key, { total: cur.total + 1, child: cur.child + (background ? 1 : 0) });
+    const lease: Lease = { id: leaseId ?? this.newId(), sessionId: id, service, modelKey: key, config: slot.config, background };
     this.live.set(id, lease);
     if (affinity) this.bindings.set(id, { modelKey: key, expiresAt: this.now() + this.deps.ttlMs() });
     this.emit({ type: "granted", sessionId: id, leaseId: lease.id, modelKey: key });
     return lease;
   }
 
-  private wait(service: ModelService, id: string, affinity: boolean, contextSize: number, preferredKey: string | undefined, deadline: number, signal?: AbortSignal): Promise<Lease | null> {
+  private wait(service: ModelService, id: string, affinity: boolean, background: boolean, contextSize: number, preferredKey: string | undefined, deadline: number, signal?: AbortSignal): Promise<Lease | null> {
     return new Promise<Lease | null>((resolve) => {
       if (signal?.aborted) return resolve(null);
       const leaseId = this.newId();
-      const w: Waiter = { id, service, affinity, contextSize, preferredKey, deadline, leaseId, resolve, signal };
+      const w: Waiter = { id, service, affinity, background, contextSize, preferredKey, deadline, leaseId, resolve, signal };
       w.onAbort = () => {
         this.removeWaiter(w);
         resolve(null);

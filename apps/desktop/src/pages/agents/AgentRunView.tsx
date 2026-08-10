@@ -22,7 +22,7 @@ export function AgentRunView({ id }: { id: string }) {
     );
   }
   const activeType = getContainer(activeContainerId)?.type;
-  const needsWorkspace = agent.workspace && activeType !== "local" && activeType !== "remote";
+  const needsWorkspace = agent.workspace && activeType !== "local";
 
   function run(text: string, atts: Attachments) {
     if (!agent) return;

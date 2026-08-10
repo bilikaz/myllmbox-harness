@@ -36,13 +36,13 @@ describe("Consumer", () => {
     s.set({ a: 2, b: "y" });
     expect(s.get()).toEqual({ a: 2, b: "y" });
     await Promise.resolve(); // persist is fire-and-forget
-    const row = await ctx.storage.localRepos().settings.get("test:s");
+    const row = await ctx.storage.repos().settings.get("test:s");
     expect(JSON.parse(String(row!.value))).toEqual({ a: 2, b: "y" });
   });
 
   it("hydrate() merges persisted state over defaults (new fields keep defaults)", async () => {
     const ctx = ctxWith();
-    await ctx.storage.localRepos().settings.put({ key: "test:s", scope: "local", value: JSON.stringify({ a: 7 }) });
+    await ctx.storage.repos().settings.put({ key: "test:s", value: JSON.stringify({ a: 7 }) });
     const s = new TestStore(ctx, "test:s");
     await s.hydrate();
     expect(s.get()).toEqual({ a: 7, b: "x" });

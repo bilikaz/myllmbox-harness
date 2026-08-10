@@ -40,7 +40,7 @@ export async function compact(ctx: Ctx, sid: string): Promise<void> {
       ? cfg.model.contextLength - contextLimit(cfg)
       : (cfg.contextReserve ?? getAppConfig().session.contextReserve);
     const { text, usage } = await ctx.llm.call({
-      service: "main",
+      service: "text",
       messages,
       system: pt("compact.system"),
       signal: controller.signal,

@@ -11,7 +11,6 @@ export type {
   LLMConfig,
   ChatMessage,
   GenParams,
-  MediaApiKind,
   MediaService,
   ModelService,
   TextProviderKind,

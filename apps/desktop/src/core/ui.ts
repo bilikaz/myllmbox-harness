@@ -5,7 +5,7 @@ import type { Ctx } from "./ctx.ts";
 
 // UI state. The persisted panel preference is a consumer (follows the connection
 // like everything else); the lightbox is transient runtime state.
-const KEY = "v84-harness:ui";
+const KEY = "myllmbox-harness:ui";
 
 class UiPanel extends Consumer<{ rightPanel: boolean }> {
   constructor(ctx: Ctx) {

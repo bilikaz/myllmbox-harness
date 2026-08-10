@@ -19,7 +19,7 @@ function underWorkspace(virtual: string): string | null {
 }
 
 // Confined virtual → real resolution (throws on escape) — standalone so non-workspace tools that take
-// an OPTIONAL workspace path (the general ImageCompose) reuse the exact same confinement.
+// an OPTIONAL workspace path (the general ImageEdit) reuse the exact same confinement.
 export function resolveWorkspacePath(virtual: string, cwd: string): string {
   const root = realpathSync(path.resolve(cwd));
   const rel = underWorkspace(String(virtual));

@@ -1,8 +1,5 @@
 // The per-entity repository layer — the typed replacement for the generic KV Storage port.
-// Each backend (local SQLite tables, web IndexedDB stores, remote API) implements StorageRepos;
-// the StorageEngine routes a call to local or remote by the entity's placement. Same shape both
-// realms — the only difference is delete: local removes the row, remote stamps deleted_at
-// server-side (the client just calls remove() and considers it gone, never seeing the soft copy).
+// Each local backend (SQLite tables, web IndexedDB stores, in-memory) implements StorageRepos.
 
 import type { Container } from "../containers.ts";
 import type { SessionMeta } from "../sessions/persistence.ts";
@@ -20,7 +17,7 @@ export interface MediaRow {
   data: string; // data: URL
 }
 
-// CRUD for an id-keyed entity. remove() is hard-delete on local, soft-delete on remote.
+// CRUD for an id-keyed entity. remove() hard-deletes the row.
 export interface CrudRepo<T> {
   list(): Promise<T[]>;
   get(id: string): Promise<T | null>;
@@ -45,10 +42,9 @@ export interface MediaRepo {
   remove(id: string): Promise<void>;
 }
 
-// Settings are key/value rows with a scope (local | account); a config Consumer persists as a row.
+// Settings are key/value rows; a config Consumer persists as a row.
 export interface SettingRow {
   key: string;
-  scope: string;
   value: unknown;
 }
 export interface SettingRepo {
@@ -73,7 +69,7 @@ export interface PluginDataRepo {
   remove(pluginId: string, collection: string, key: string): Promise<void>;
 }
 
-// Every entity in the model, on one structure — local + remote backends both implement this.
+// Every entity in the model, on one structure — each local backend implements this.
 export interface StorageRepos {
   containers: CrudRepo<Container>;
   sessions: CrudRepo<SessionMeta>;
@@ -82,7 +78,7 @@ export interface StorageRepos {
   agents: CrudRepo<Agent>;
   settings: SettingRepo;
   pluginData: PluginDataRepo;
-  // Clear ALL local data (every table/store). For the data-version gate's breaking-change reset
-  // (core/storage/version.ts) — called only on the LOCAL provider; the remote implementation refuses.
+  // Clear ALL data (every table/store). For the data-version gate's breaking-change reset
+  // (core/storage/version.ts).
   wipe(): Promise<void>;
 }

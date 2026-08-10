@@ -1,6 +1,6 @@
 // Agent grounding: the `*` wildcard ceiling in agentPermissions. A graph head (or any agent) sets
 // `{ "*": 0, ... }` to restrict itself to ONLY the tools it lists, instead of inheriting the workspace's
-// full toolset — so a consolidator with `{ "*": 0 }` gets zero tools and can't reach Fetch/SaveMemory.
+// full toolset — so a consolidator with `{ "*": 0 }` gets zero tools and can't reach Fetch/Grep.
 // The ceiling binds EVERY tool, permissionless (general-tier) ones included — a grounded head must not
 // escape through ImageGenerate just because it sits outside the workspace permission policy.
 import { describe, expect, it } from "vitest";
@@ -41,7 +41,7 @@ const cfg = () => ({ plugins: {} }) as unknown as Config;
 const registry = new ToolRegistry(cfg, {
   "/core/tools/Read.ts": { Read: permTool("Read") },
   "/core/tools/Fetch.ts": { Fetch: permTool("Fetch") },
-  "/core/tools/SaveMemory.ts": { SaveMemory: permTool("SaveMemory") },
+  "/core/tools/Grep.ts": { Grep: permTool("Grep") },
   "/core/tools/ImageGenerate.ts": { ImageGenerate: freeTool("ImageGenerate") },
 });
 const advertised = (agentPermissions?: Record<string, 0 | 1 | 2>): string[] =>
@@ -57,7 +57,7 @@ describe("agent tool grounding", () => {
   });
 
   it("without a wildcard, unlisted tools still inherit (prior behaviour)", () => {
-    expect(advertised({ Read: 2 })).toEqual(["Fetch", "ImageGenerate", "Read", "SaveMemory"]);
+    expect(advertised({ Read: 2 })).toEqual(["Fetch", "Grep", "ImageGenerate", "Read"]);
   });
 
   it("the ceiling clamps PERMISSIONLESS tools too — no escape through the general tier", () => {

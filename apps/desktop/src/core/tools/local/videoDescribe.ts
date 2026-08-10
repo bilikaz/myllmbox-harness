@@ -59,7 +59,7 @@ export class VideoDescribe extends BaseWorkspaceTool {
     const p = String(args.path ?? "");
     if (!p) return { ok: false, output: `VideoDescribe rejected: missing required "path". Example: {"path":"/workspace/assets/clip.mp4"}` };
     if (!this.llm.resolve("videoRec")) {
-      return { ok: false, output: `VideoDescribe is not configured. Assign a video recognition model in Settings → Media models.` };
+      return { ok: false, output: `VideoDescribe is not configured. Assign a video recognition model in Settings → Providers.` };
     }
     const query = typeof args.query === "string" && args.query.trim() ? args.query.trim() : "Describe this video in detail: what happens over time, the subjects and their actions, the setting, and anything notable.";
     try {

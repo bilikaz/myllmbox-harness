@@ -5,14 +5,12 @@ import { createClient, HealError, jsonHandler, bufferEvents, type ResponseHandle
 import type { CallTarget } from "../src/llm/types.ts";
 
 const CFG: CallTarget = { provider: { name: "m", type: "openai", baseUrl: "http://llm:8000/v1" }, model: { id: "x" } };
-const BANSAI: CallTarget = { provider: { name: "Bansai", type: "generate", baseUrl: "http://b/" }, model: {} };
+const IMG: CallTarget = { provider: { name: "Img", type: "openai", baseUrl: "http://b" }, model: {} };
 
-// Fixture: imageRec is deliberately (mis)assigned the same bare generate target as imageGen.
 const client = createClient({
   resolve(service) {
-    if (service === "main") return CFG;
-    if (service === "imageGen") return BANSAI;
-    if (service === "imageRec") return BANSAI;
+    if (service === "text") return CFG;
+    if (service === "image") return IMG;
     return null;
   },
 });
@@ -27,13 +25,13 @@ afterEach(() => vi.unstubAllGlobals());
 describe("client.call", () => {
   it("returns the trimmed text with the provider's default handler", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(sse("  hello  ")));
-    expect(await client.call({ service: "main", messages: [{ role: "user", content: "hi" }] })).toBe("hello");
+    expect(await client.call({ service: "text", messages: [{ role: "user", content: "hi" }] })).toBe("hello");
   });
 
   it("throws on an unassigned service without firing a request", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    await expect(client.call({ service: "videoGen", messages: [{ role: "user", content: "x" }] })).rejects.toThrow(/no model is assigned/);
+    await expect(client.call({ service: "video", messages: [{ role: "user", content: "x" }] })).rejects.toThrow(/no model is assigned/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -47,7 +45,7 @@ describe("client.call", () => {
         return true;
       },
     };
-    expect(await client.call({ service: "main", messages: [{ role: "user", content: "hi" }], handler: myBelovedHandler })).toBe(true);
+    expect(await client.call({ service: "text", messages: [{ role: "user", content: "hi" }], handler: myBelovedHandler })).toBe(true);
     expect(sink).toEqual(["saved"]);
   });
 
@@ -56,7 +54,7 @@ describe("client.call", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const obj = await client.call({
-      service: "main",
+      service: "text",
       messages: [{ role: "user", content: "give json" }],
       handler: jsonHandler((t) => JSON.parse(t) as { a: number }),
     });
@@ -73,39 +71,43 @@ describe("client.call", () => {
   it("rethrows the HealError once the budget is spent", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(sse("never-json")));
     await expect(
-      client.call({ service: "main", messages: [{ role: "user", content: "json" }], handler: jsonHandler(JSON.parse), maxHeals: 1 }),
+      client.call({ service: "text", messages: [{ role: "user", content: "json" }], handler: jsonHandler(JSON.parse), maxHeals: 1 }),
     ).rejects.toBeInstanceOf(HealError);
   });
 
-  it("the provider supplies the default handler: imageGen on a bare generate target yields an image, prompt-only body", async () => {
-    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
-    const fetchMock = vi.fn().mockResolvedValue(new Response(png, { status: 200, headers: { "content-type": "image/png" } }));
+  it("the provider supplies the default handler: an image target yields an image via /images/generations", async () => {
+    const b64 = Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString("base64");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ data: [{ b64_json: b64 }], output_format: "png" }), { status: 200, headers: { "content-type": "application/json" } }));
     vi.stubGlobal("fetch", fetchMock);
 
     const out = await client.call<{ b64: string; mime: string }>({
-      service: "imageGen",
+      service: "image",
       messages: [{ role: "user", content: "a red square" }],
     });
     expect(out.mime).toBe("image/png");
-    // No params given → no knobs sent; the server's own defaults apply.
-    expect(JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body))).toEqual({ prompt: "a red square" });
+    expect(out.b64).toBe(b64);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://b/images/generations");
+    // No dimensions/seed given → only the constant knobs; the server's own defaults apply.
+    expect(JSON.parse(String(init.body))).toEqual({ prompt: "a red square", n: 1, response_format: "b64_json" });
   });
 
-  it("refuses a chat service whose target can't chat — non-healable, no request fired", async () => {
+  it("refuses a service whose target type has no provider for its modality — non-healable, no request fired", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
+    // An image service resolved to an anthropic target: media generation is OpenAI-only, so there is
+    // no image/anthropic provider — the load step throws before any request fires.
+    const c = createClient({ resolve: () => ({ provider: { name: "a", type: "anthropic", baseUrl: "http://a" }, model: {} }) });
     await expect(
-      client.call({
-        service: "imageRec",
-        messages: [{ role: "user", content: "hi" }],
-        handler: jsonHandler(JSON.parse),
-      }),
-    ).rejects.toThrow(/there is no text\/generate provider/);
+      c.call({ service: "image", messages: [{ role: "user", content: "hi" }], handler: jsonHandler(JSON.parse) }),
+    ).rejects.toThrow(/there is no image\/anthropic provider/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("propagates transport failures untouched", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("boom", { status: 400, statusText: "Bad Request" })));
-    await expect(client.call({ service: "main", messages: [{ role: "user", content: "hi" }] })).rejects.toThrow(/400/);
+    await expect(client.call({ service: "text", messages: [{ role: "user", content: "hi" }] })).rejects.toThrow(/400/);
   });
 });

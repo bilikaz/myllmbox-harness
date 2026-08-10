@@ -67,9 +67,9 @@ export async function capabilitiesFor(app: Ctx, session: Session | undefined, si
 }
 
 // The FULL system prompt — base + plugin prompts + capability blocks. Every block is gated on the
-// capability actually being CALLABLE (its tool in the specs / its access flag): prose naming tools a
-// session doesn't have gets them fabricated from the description (schema-less SaveMemory calls in
-// grounded sub chats). This list exists ONCE — the wire and the banner both render it.
+// capability actually being CALLABLE (its tool in the specs / its access flag): prose naming a tool a
+// session doesn't have gets that tool fabricated from the description in grounded sub chats. This list
+// exists ONCE — the wire and the banner both render it.
 export function composeSystem(session: Session | undefined, caps: SessionCapabilities): string | undefined {
   const has = (n: string): boolean => caps.toolSpecs.some((t) => t.function.name === n);
   const wsTools = Object.values(caps.filtered)
@@ -81,8 +81,6 @@ export function composeSystem(session: Session | undefined, caps: SessionCapabil
       ...enabledPluginPrompts(),
       caps.fsAccess ? pt("workspace.system", { tools: wsTools.join(", ") }) : undefined,
       caps.browserAccess ? pt("browser.system") : undefined,
-      has("SaveMemory") ? pt("memory.save") : undefined,
-      has("SearchMemory") ? pt("memory.search") : undefined,
       has("GalleryCompose") ? pt("gallery.system", { counts: supportedCounts().join("/") }) : undefined,
       has(RUN_AGENT) ? pt("agents.system") : undefined,
       has(RUN_AGENT) ? pt("agents.async") : undefined,

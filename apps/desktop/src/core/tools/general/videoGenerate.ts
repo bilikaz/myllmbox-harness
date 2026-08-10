@@ -7,10 +7,10 @@ import { ASPECTS, deriveSize, parseDims, pickQuality, qualityWidth, randomSeed }
 import { cosmosVideoPrompt } from "../helpers/upsampler/cosmos.ts";
 import { getAppConfig } from "../../config/index.ts";
 
-// VideoGenerate: prompt → videoGen slot model → clip as a data-URL riding the message. Generation is SLOW (~minutes per second of video).
+// VideoGenerate: prompt → the `video` pool model → clip as a data-URL riding the message. Generation is SLOW (~minutes per second of video).
 export class VideoGenerate extends BaseGeneralTool {
   override canRun(): boolean {
-    return this.llm.resolve("videoGen") != null;
+    return this.llm.resolve("video") != null;
   }
 
   get schema(): ToolSpec {
@@ -50,7 +50,7 @@ export class VideoGenerate extends BaseGeneralTool {
   async run(args: Record<string, unknown>, _cwd?: string, signal?: AbortSignal): Promise<ToolResult> {
     const prompt = String(args.prompt ?? "").trim();
     if (!prompt) return { ok: false, output: `VideoGenerate rejected: missing required "prompt".` };
-    const media = this.requireSlot("videoGen", "VideoGenerate");
+    const media = this.requireSlot("video", "VideoGenerate");
     if ("ok" in media) return media;
     const cfg = getAppConfig().videoGen;
 
@@ -77,7 +77,7 @@ export class VideoGenerate extends BaseGeneralTool {
 
     try {
       const { b64, mime } = await this.llm.call({
-        service: "videoGen",
+        service: "video",
         messages: [{ role: "user", content: finalPrompt }],
         signal: signal,
         handler: videoHandler(),

@@ -17,4 +17,8 @@ tasks execute is the [architecture hub](../ARCHITECTURE.md) + the
 
 | Task | Title | Status | Covers |
 | --- | --- | --- | --- |
-| _(none yet)_ | The first iteration creates `task1/`. | | |
+| [task1](task1/task.md) | Remove the remote backend: a local-only solo harness | **built · verified** (typecheck + 215 tests green; app-launch not run) · [report](task1/report.md) | supersedes ADR-0039/0040/0041/0071 · amends 0044/0045 · new local-only posture ADR |
+| [task2](task2/task.md) | Unify providers: one registry, 7 input→output use-cases | **PRD approved · implementation.md in progress** | refines ADR-0042 (use-cases derived from output+inputs; imageGen+imageEdit→image); drops the hardcoded default seed |
+| [task3](task3/task.md) | Generation sessions: chat with a media model (Images/Videos) | **scope settled · PRD drafted** | depends on task2; reuses the session/message stack; no new store |
+
+> The **prod deploy** (docker/prod + Cloudflare tunnel, live at harness.myllmbox.com) shipped ad-hoc under the commit label "task2" **before** this index adopted that number, and never got its own task docs. The documented `task2/` slot is this providers refactor; the deploy is captured in that commit + the docs pass, not a task folder.

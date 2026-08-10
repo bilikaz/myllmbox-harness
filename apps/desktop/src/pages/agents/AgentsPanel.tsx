@@ -16,7 +16,7 @@ export function AgentsPanel() {
   const route = useRoute();
   const plugins = usePluginsConfig();
   const activeType = getContainer(activeContainerId)?.type;
-  const inWorkspace = activeType === "local" || activeType === "remote";
+  const inWorkspace = activeType === "local";
   // User agents + plugin agents whose owning plugin is enabled AND that declare themselves general-purpose
   // (`listed` in agents.json) — undeclared plugin agents are internal graph workers, never catalog entries.
   const pluginVisible = getPluginAgents().filter((a) => a.listed && plugins[a.ownerPluginId ?? ""]?.enabled);

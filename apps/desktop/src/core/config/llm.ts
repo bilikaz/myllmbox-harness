@@ -25,9 +25,9 @@ export interface LLMConfig {
     maxImageSize?: string;
     maxVideoSize?: string;
   };
-  // What the model accepts inline (chat/main). Gates the media-load tools in canRun: image assumed
-  // on unless declared off, video only when declared on. Absent on media-service targets.
-  input?: { image?: boolean; video?: boolean; audio?: boolean };
+  // What the model accepts inline (the `text` chat pool). Each accepted input is explicit; gates the
+  // media-load tools in canRun (image/video read the plain boolean). Absent on media-service targets.
+  input?: { text?: boolean; image?: boolean; video?: boolean; audio?: boolean };
 }
 
 export type LLMConfigList = Partial<Record<ModelService, LLMConfig>>;

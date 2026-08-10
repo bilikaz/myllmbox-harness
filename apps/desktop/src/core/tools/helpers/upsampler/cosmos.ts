@@ -64,10 +64,10 @@ async function upsample(
   signal: AbortSignal | undefined,
   finalize?: (obj: Record<string, unknown>) => void,
 ): Promise<string> {
-  // No pre-check: an unconfigured "main" makes call() throw, and ANY failure falls back to the raw prompt.
+  // No pre-check: an unconfigured "text" model makes call() throw, and ANY failure falls back to the raw prompt.
   try {
     const obj = await client.call({
-      service: "main",
+      service: "text",
       messages: [{ role: "user", content: prompt }],
       system,
       signal,

@@ -44,7 +44,7 @@ interface Segment {
   meta: { firstExchange: boolean; autoName: boolean; userText: string };
   opts: SendOptions;
   leased: boolean;
-  callTarget?: LLMConfig; // the leased binding — undefined falls back to the global `main` assignment
+  callTarget?: LLMConfig; // the leased binding — undefined falls back to the global `text` assignment
   callTargetModelId?: string;
   imageMaxDim?: number; // from the resolved main config — tool images downscale to it
   turnInput: Record<string, unknown>;
@@ -133,8 +133,8 @@ export class LlmSessionLoop extends SessionLoopBase {
     seg.errorKind = undefined;
     try {
       const { text, thinking, calls } = await this.app.llm.call({
-        service: "main",
-        target: seg.callTarget, // the leased pool binding; undefined falls back to the `main` assignment
+        service: "text",
+        target: seg.callTarget, // the leased pool binding; undefined falls back to the `text` assignment
         messages: history,
         system,
         tools: seg.caps.toolSpecs,
@@ -295,8 +295,9 @@ export class LlmSessionLoop extends SessionLoopBase {
     const controller = new AbortController();
     this.host.registerInflight(sid, controller);
     const isChild = !!getSession(sid)?.parentId;
-    const role = isChild ? "subAgent" : "main";
-    const lease = await this.app.runner.acquire(role, sid, getSession(sid)?.meta.usedTokens ?? 0, { signal: controller.signal });
+    // Foreground chat and background sub-agent runs share the `text` pool; a child run leases in the
+    // background (capped at the open band so it can't starve the foreground).
+    const lease = await this.app.runner.acquire("text", sid, getSession(sid)?.meta.usedTokens ?? 0, { background: isChild, signal: controller.signal });
     if (!lease && controller.signal.aborted) {
       this.host.clearInflight(sid);
       bus.emit("message:done", { sessionId: sid, text: "", thinking: "", errored: false, firstExchange: p.meta.firstExchange, autoName: p.meta.autoName, userText: p.meta.userText });
@@ -413,7 +414,7 @@ export class LlmSessionLoop extends SessionLoopBase {
 function withMediaRefNote(output: string, images?: Image[], videos?: Video[]): string {
   const labels = [...(images ?? []), ...(videos ?? [])].filter((g) => g.ref).map(refLabel);
   if (!labels.length) return output;
-  return `${output}\n[media reference${labels.length > 1 ? "s" : ""}: ${labels.join(", ")} — reuse by alias, e.g. in ImageCompose references]`;
+  return `${output}\n[media reference${labels.length > 1 ? "s" : ""}: ${labels.join(", ")} — reuse by alias, e.g. in ImageEdit references]`;
 }
 
 export function dropExtraSingleCalls(calls: ToolCallRequest[], isSingle: (name: string) => boolean): ToolCallRequest[] {

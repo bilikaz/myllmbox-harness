@@ -1,15 +1,15 @@
-// config.plugins — per-plugin enable flag + settings, persisted as a settings-table row (synced;
-// follows the connection to the cloud, credentials included, by design). A ctx-injected Consumer
-// mirroring config/app.ts: stored state is the raw per-slug overrides; effective() validates each
-// registered plugin's settings against its manifest and fills defaults. Source of truth for enable +
-// settings — there is no `plugins` table (first-party plugins have no installed-registration row).
+// config.plugins — per-plugin enable flag + settings, persisted as a settings-table row. A
+// ctx-injected Consumer mirroring config/app.ts: stored state is the raw per-slug overrides;
+// effective() validates each registered plugin's settings against its manifest and fills defaults.
+// Source of truth for enable + settings — there is no `plugins` table (first-party plugins have no
+// installed-registration row).
 
 import { Consumer } from "../storage/consumer.ts";
 import type { Ctx } from "../ctx.ts";
 import { pluginManifests, pluginManifest } from "./registry.ts";
 import type { PluginsConfig, PluginConfigEntry } from "./types.ts";
 
-const KEY = "v84-harness:plugins";
+const KEY = "myllmbox-harness:plugins";
 
 // Raw stored overrides, per slug. Both optional — a missing entry falls back to manifest defaults.
 type PluginOverride = { enabled?: boolean; settings?: unknown };
@@ -19,7 +19,7 @@ class PluginsConfigStore extends Consumer<PluginsState> {
   private cached: PluginsConfig | null = null;
 
   constructor(ctx: Ctx) {
-    super(ctx, KEY, {}, true); // synced — enable + settings follow the connection
+    super(ctx, KEY, {});
   }
 
   protected override notify(): void {

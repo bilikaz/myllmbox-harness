@@ -60,7 +60,7 @@ function transportFor(server: McpServer, override?: McpSecretOverride): Transpor
 }
 
 async function newConnectedClient(transport: Transport): Promise<Client> {
-  const client = new Client({ name: "v84-harness", version: "0.1.0" });
+  const client = new Client({ name: "myllmbox-harness", version: "0.1.0" });
   try {
     await client.connect(transport);
     return client;
