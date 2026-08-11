@@ -8,7 +8,7 @@ import { registerIpc } from "./ipc.ts";
 import { registerContextMenu } from "./contextMenu.ts";
 import { initBrowserFleet } from "./browserFleet.ts";
 import { wirePluginEvents, wirePluginTools } from "./pluginServices.ts";
-import { toolRegistrar } from "./tools.ts";
+import { registry } from "./tools.ts";
 import { IPC } from "./bridge.ts";
 
 const electron = createRequire(import.meta.url)("electron") as typeof import("electron");
@@ -84,8 +84,8 @@ function createWindow(): void {
 
 void app.whenReady().then(() => {
   registerIpc(electron);
-  // Give plugin services the registry registrar before any connect can register runtime tools (MCP).
-  wirePluginTools(toolRegistrar);
+  // Give plugin services the tool registry before any connect can register runtime tools (MCP).
+  wirePluginTools(registry);
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

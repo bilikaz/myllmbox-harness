@@ -1,6 +1,6 @@
 // The MCP plugin's stateful service — a module-level singleton in the MAIN process. Owns the live MCP
 // clients keyed by RAW server name. On connect it discovers the server's tools (tools/list) and REGISTERS
-// one McpTool per tool into the main registry (via the registrar the host bound at startup); on disconnect
+// one McpTool per tool into the main registry (the ToolRegistry the host bound at startup); on disconnect
 // it unregisters them and closes the client. The agent's tool set is the union of connected servers' tools.
 //
 // Connections are opened on demand (the right-rail panel / a Refresh), never eagerly — install() is a no-op,
@@ -12,7 +12,7 @@ import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import { auth } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 
-import type { PluginToolRegistrar } from "../../core/plugins/types.ts";
+import type { ToolRegistry } from "../../core/tools/registry.ts";
 import type { ToolResult, ToolSpec, Image } from "../../core/tools/types.ts";
 import { cap } from "../../core/tools/base.ts";
 import { errorMessage } from "../../lib/errors.ts";
@@ -36,9 +36,9 @@ interface Live {
 const live = new Map<string, Live>();
 
 // The host binds this at startup (wirePluginTools), before any connect.
-let registrar: PluginToolRegistrar | null = null;
-export function bindRegistrar(r: PluginToolRegistrar): void {
-  registrar = r;
+let registry: ToolRegistry | null = null;
+export function bindRegistry(r: ToolRegistry): void {
+  registry = r;
 }
 
 // Connection-state subscribers — the host forwards to the renderer so the panel reflects every change.
@@ -137,7 +137,7 @@ async function callTool(client: Client, tool: string, args: Record<string, unkno
 // Connect (or re-fire): drop any prior registration, open the client, discover tools, register each.
 // Throws on failure (no client established / tools/list failed) — the panel surfaces the message verbatim.
 async function connect(server: McpServer, override?: McpSecretOverride): Promise<void> {
-  if (!registrar) throw new Error("MCP tool registrar not bound");
+  if (!registry) throw new Error("MCP tool registry not bound");
   await disconnect(server.name);
   const client = await openConnectedClient(server, override);
   const names: string[] = [];
@@ -151,11 +151,11 @@ async function connect(server: McpServer, override?: McpSecretOverride): Promise
         function: { name: mcpToolName(server.name, t.name), description: t.description ?? "", parameters: t.inputSchema ?? { type: "object" } },
       };
       const desc: McpToolDescriptor = { server: server.name, tool: t.name, schema, call: (args, signal) => callTool(client, t.name, args, signal) };
-      registrar.register(desc.schema.function.name, (config, container) => new McpTool(config, container, desc), MCP_SLUG);
+      registry.register(desc.schema.function.name, (config, container) => new McpTool(config, container, desc), MCP_SLUG);
       names.push(t.name);
     }
   } catch (e) {
-    for (const t of names) registrar.unregister(mcpToolName(server.name, t));
+    for (const t of names) registry.unregister(mcpToolName(server.name, t));
     await client.close().catch(() => undefined);
     throw e;
   }
@@ -167,7 +167,7 @@ async function disconnect(name: string): Promise<void> {
   const l = live.get(name);
   if (!l) return;
   live.delete(name);
-  for (const t of l.tools) registrar?.unregister(mcpToolName(name, t));
+  for (const t of l.tools) registry?.unregister(mcpToolName(name, t));
   notify();
   await l.client.close().catch(() => undefined);
 }

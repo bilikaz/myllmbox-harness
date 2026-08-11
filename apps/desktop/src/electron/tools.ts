@@ -6,7 +6,6 @@ import { getConfig, type Config } from "../core/config/index.ts";
 import { ToolRegistry } from "../core/tools/registry.ts";
 import { ToolRunner, projectTools } from "../core/tools/runner.ts";
 import type { ToolCallRequest, ToolResult, ToolFilterParams, ToolFilterResult, WireConfig } from "../core/tools/types.ts";
-import type { PluginToolRegistrar } from "../core/plugins/types.ts";
 import { setPageRenderer } from "../core/gallery/render.ts";
 import { renderPageOffscreen } from "./pageRender.ts";
 
@@ -23,14 +22,16 @@ const MODULES = {
 // tools (and the clients they derive) see live config. The container rides on the wire (execTool) / params
 // (toolFilter) and is passed to resolve(), so `this.container` in a tool is the active session's container.
 let config: Config = getConfig();
-const reg = new ToolRegistry(() => config, MODULES);
-const runner = new ToolRunner(reg);
+// Exported so the host can hand it straight to plugin services (wirePluginTools) for runtime tool
+// registration — plugins register into THIS registry, no separate registrar wrapper.
+export const registry = new ToolRegistry(() => config, MODULES);
+const runner = new ToolRunner(registry);
 // Gallery pages render in main via an offscreen window — inject the platform muscle into the core port.
 setPageRenderer(renderPageOffscreen);
 
 export function toolFilter(wire: WireConfig, params: ToolFilterParams): ToolFilterResult {
   config = wire.config;
-  return projectTools(reg.filter(params));
+  return projectTools(registry.filter(params));
 }
 
 export async function execTool(call: ToolCallRequest, wire: WireConfig): Promise<ToolResult> {
@@ -42,10 +43,3 @@ export async function execTool(call: ToolCallRequest, wire: WireConfig): Promise
 export function cancelTool(callId: string): void {
   runner.cancel(callId);
 }
-
-// Handed to plugin services (wirePluginTools) so they can register runtime-discovered tools into THIS
-// registry. config is the wire-seeded getter, so a registered tool sees live config like a globbed one.
-export const toolRegistrar: PluginToolRegistrar = {
-  register: (name, make, owner) => reg.register(name, make, owner),
-  unregister: (name) => reg.unregister(name),
-};

@@ -31,7 +31,7 @@ is a no-op, like the Database plugin. On connect the service:
 
 1. builds the transport for the server (stdio subprocess or streamable-HTTP; OAuth runs first — see below),
 2. calls `tools/list`,
-3. for each tool **registers an `McpTool`** into the main registry via the injected registrar
+3. for each tool **registers an `McpTool`** into the injected main `ToolRegistry`
    ([ADR-0062](../adr/0062-runtime-registered-tools.md)), named `MCP_<Server>_<Tool>`.
 
 `McpTool` is an ordinary `BaseTool`, so it flows through `ctx.tools.filter/run/cancel` like any tool — it
@@ -43,9 +43,10 @@ tool name — the PascalCase display name is never parsed. Disconnect / **Refres
 tools (Refresh = re-list + re-register, the v1 stand-in for `tools/list_changed`). Per-tool permission choices
 survive re-registration because the policy keys on the stable name.
 
-The service reaches the registry without importing the platform: the host injects a `PluginToolRegistrar`
-(`register` / `unregister` + the wire-seeded `config` getter) via `electron/pluginServices.ts wirePluginTools()`
-→ the service's `bindRegistrar()`, wired once at startup ([ADR-0062](../adr/0062-runtime-registered-tools.md)).
+The service reaches the registry without importing the platform: the host injects the **main `ToolRegistry`**
+(its `register` / `unregister`, over the wire-seeded `config` getter) via `electron/pluginServices.ts
+wirePluginTools()` → the service's `bindRegistry()`, wired once at startup
+([ADR-0062](../adr/0062-runtime-registered-tools.md)).
 
 ## Transports
 

@@ -37,7 +37,8 @@ Part of the architecture map — start at [../ARCHITECTURE.md](../ARCHITECTURE.m
   `(config, container) => BaseTool` factory shape as a globbed one, so `filter`/`resolve` treat a runtime
   entry identically. It's owner-tagged so the disabled-plugin gate still applies. This is the **first dynamic
   (runtime-discovered) tool source** — a plugin's main-side service contributes them through an injected
-  `PluginToolRegistrar` (never importing the platform; see [plugins.md](plugins.md)), the worked case being
+  main `ToolRegistry` (the instance, injected — plugins call its `register`/`unregister` directly; never
+  importing the platform; see [plugins.md](plugins.md)), the worked case being
   the MCP plugin discovering a server's tools at connect ([mcp.md](mcp.md)).
 - **The folder is the permission tier** (and the process it's globbed into):
   - **`general/`** — no workspace, available in any session (chat included). Host-agnostic (HTTP +

@@ -55,4 +55,9 @@ the callers built by casting `container.permissions` — the same blob, laundere
 - `filter` requires a container; callers that have none pass `ephemeralContainer` (a chat type for baselines,
   a local type for the permission catalog). This also fixed a latent dead re-filter in `capabilitiesFor`
   (both passes were identical, so the fs-tool diff was always empty).
+- The `PluginToolRegistrar` wrapper interface is removed (amends
+  [ADR-0062](0062-runtime-registered-tools.md)): a plugin's main-side service is injected the **`ToolRegistry`
+  instance** and calls its `register`/`unregister` directly (`electron/tools.ts` exports `registry`;
+  `wirePluginTools(registry)` → the service's `bindRegistry(registry)`). One fewer type; the registry's public
+  register surface *is* the plugin registration contract.
 - Glossary: **tool permission** (mode retired), **tool runner**, **resolve (a tool)**.

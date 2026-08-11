@@ -124,7 +124,7 @@ Deep dives, one per subsystem — read the one for the area you're touching
 | [architecture/runner.md](architecture/runner.md) | The concurrency runner: per-service priority pools, per-model `c` + reserve, turn-held slot leases, provider affinity, the wait queue |
 | [architecture/ui.md](architecture/ui.md) | Contribution registry/regions, routing, agents UX, UI patterns, i18n |
 | [architecture/storage.md](architecture/storage.md) | Durable persistence: per-entity `StorageRepos`, the provider swap (`repos()` vs `localRepos()`), tables, shapes, accessor surface |
-| [architecture/plugins.md](architecture/plugins.md) | The plugin system: in-tree `<slug>/` folders, the full surface, the service bridge (RPC + events + lifecycle + tool registrar), the reference plugins |
+| [architecture/plugins.md](architecture/plugins.md) | The plugin system: in-tree `<slug>/` folders, the full surface, the service bridge (RPC + events + lifecycle + runtime tool registration), the reference plugins |
 | [architecture/mcp.md](architecture/mcp.md) | The MCP plugin: client-plane connections, runtime-registered tools, stdio + HTTP transports, the three auth modes + OAuth flow |
 | [architecture/knowledge.md](architecture/knowledge.md) | The `apps/knowledge` remote service: registry, auth, `/data`, the knowledgebase plane, dev stack |
 

@@ -6,6 +6,12 @@ Amends [ADR-0033](0033-tools-registry-folder-by-permission.md) (the tool registr
 and [ADR-0049](0049-plugin-service-bridge.md) (the service bridge gains a tool registrar). Present-tense
 map: [architecture/tools.md](../architecture/tools.md), [architecture/plugins.md](../architecture/plugins.md).
 
+> **Amended 2026-08-11 ([ADR-0084](0084-tool-resolution-and-runner-split.md)):** the injected `register`/
+> `unregister` are now the **`ToolRegistry` instance itself** — the `PluginToolRegistrar` wrapper interface
+> is removed, and `register` takes `(name, make, ownerPluginId)` (a factory, keyed by an explicit name). The
+> host hands the registry to a service's `bindRegistry(registry)`. The decision below is unchanged; only the
+> injected type is (the registry, not a bespoke wrapper).
+
 ## Context
 
 The tool registry has been a **build-time** structure — "the folder layout IS the registry"

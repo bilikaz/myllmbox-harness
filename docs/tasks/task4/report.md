@@ -112,3 +112,9 @@ container) — the contract genuinely changed, so the tests moved with it, not w
 
 **Judgment call flagged:** `defaultPermission` is a **field** (dynamic cases compute it in the constructor,
 valid now that tools build per call), not a getter — keeps a plain property read in `calculatePermission`.
+
+**Follow-up — `PluginToolRegistrar` removed.** It was a wrapper interface structurally identical to the
+`ToolRegistry`'s `register`/`unregister` subset (electron-only; MCP the sole user). Deleted it: `electron/
+tools.ts` exports the `registry` instance, `wirePluginTools(registry)` hands it straight to a service's
+`bindRegistry(registry)` (renamed from `bindRegistrar`). One fewer type, no behavioural change; amends
+ADR-0062. typecheck + 220 tests still green.
