@@ -1,6 +1,6 @@
 # ADR-0084: The registry resolves; a runner executes; the container is a per-call value
 
-Status: Proposed
+Status: Accepted
 Date: 2026-08-11
 Amends [ADR-0048](0048-tool-ctx-config-carrier.md) (the config carrier — container joins config as a
 constructor dependency) and the registry shape of [ADR-0033](0033-tools-registry-folder-by-permission.md) /
