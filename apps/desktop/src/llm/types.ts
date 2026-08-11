@@ -29,15 +29,14 @@ export interface Video {
   ref?: string;
 }
 
-// A tool call the model requested. `cwd` is the workspace root the dispatcher runs it under ("" when the model
-// emits it / for workspace-less tools); the gateway fills it in before execution. `imageOutputDir` is the
-// workspace-relative folder generated/edited images are saved into (from the container config); like `cwd`
-// it's a non-model field the engine fills at dispatch.
+// A tool call the model requested. `container` is the active session's container (task4) — the dispatcher
+// re-seeds each tool's `container()` getter from it, so `canRun()` gates on the type and workspace tools
+// read the root from `container.config.root` (the old `cwd` param is gone). `imageOutputDir` is the
+// workspace-relative folder generated/edited images are saved into; a non-model field the engine fills at dispatch.
 export interface ToolCallRequest {
   id: string;
   name: string;
   arguments: string;
-  cwd: string;
   imageOutputDir?: string;
   // Media aliases mentioned in `arguments`, pre-resolved by the engine to their content (tools run
   // across the bridge as pure data and can't reach the session transcript). Non-model, engine-filled.

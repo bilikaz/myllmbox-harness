@@ -5,8 +5,7 @@ import { BaseWorkspaceTool } from "./base.ts";
 import { errorMessage } from "../../../lib/errors.ts";
 
 export class CreateFolder extends BaseWorkspaceTool {
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "CreateFolder",
@@ -19,9 +18,9 @@ export class CreateFolder extends BaseWorkspaceTool {
         },
       },
     };
-  }
 
-  async run(args: Record<string, unknown>, cwd: string): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+    const cwd = this.cwd() ?? "";
     const p = String(args.path ?? "");
     if (!p) return { ok: false, output: `CreateFolder rejected: missing required "path".` };
     try {

@@ -5,8 +5,7 @@ import { BaseWorkspaceTool, WORKSPACE_ROOT } from "./base.ts";
 import { errorMessage } from "../../../lib/errors.ts";
 
 export class List extends BaseWorkspaceTool {
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "List",
@@ -20,9 +19,9 @@ export class List extends BaseWorkspaceTool {
         },
       },
     };
-  }
 
-  async run(args: Record<string, unknown>, cwd: string): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+    const cwd = this.cwd() ?? "";
     const p = String(args.path ?? WORKSPACE_ROOT);
     try {
       const entries = await readdir(this.resolvePath(p, cwd), { withFileTypes: true });

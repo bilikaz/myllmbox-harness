@@ -126,13 +126,13 @@ export function AgentEditView({ id }: { id: string }) {
             <label className="flex items-center gap-2 text-sm text-neutral-800">
               <input
                 type="checkbox"
-                checked={agent.workspace}
-                onChange={(e) => saveAgent(id, { workspace: e.target.checked })}
+                checked={!!agent.containers}
+                onChange={(e) => saveAgent(id, { containers: e.target.checked ? ["local"] : undefined })}
               />
               {t("agents.workspace")}
             </label>
             <span className="text-xs text-neutral-400">{t("agents.workspaceHelp")}</span>
-            {agent.workspace && (
+            {agent.containers && (
               <>
                 <span className="pt-1 text-xs text-neutral-400">{t("agents.permissionsHelp")}</span>
                 <div className="grid grid-cols-3 gap-x-6 gap-y-1.5 pt-1">

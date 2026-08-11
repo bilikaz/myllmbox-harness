@@ -25,11 +25,10 @@ const SYSTEM =
 
 export class ImageDescribe extends BaseWorkspaceTool {
   override canRun(): boolean {
-    return this.llm.resolve("imageRec") != null;
+    return super.canRun() && this.llm.resolve("imageRec") != null;
   }
 
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "ImageDescribe",
@@ -53,9 +52,9 @@ export class ImageDescribe extends BaseWorkspaceTool {
         },
       },
     };
-  }
 
-  async run(args: Record<string, unknown>, cwd: string, signal?: AbortSignal): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+    const cwd = this.cwd() ?? "";
     const p = String(args.path ?? "");
     if (!p) return { ok: false, output: `ImageDescribe rejected: missing required "path". Example: {"path":"/workspace/assets/photo.png"}` };
     if (!this.llm.resolve("imageRec")) {

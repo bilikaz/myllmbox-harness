@@ -125,7 +125,7 @@ export async function* streamOpenAI(
   }
 
   for (const c of [...toolAcc.entries()].sort((a, b) => a[0] - b[0]).map((e) => e[1])) {
-    if (c.name) yield { type: "tool_call", call: { id: c.id, name: c.name, arguments: c.args, cwd: "" } };
+    if (c.name) yield { type: "tool_call", call: { id: c.id, name: c.name, arguments: c.args } };
   }
   yield { type: "done" };
 }

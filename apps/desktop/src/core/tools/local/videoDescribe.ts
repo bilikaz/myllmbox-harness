@@ -25,11 +25,10 @@ const SYSTEM =
 
 export class VideoDescribe extends BaseWorkspaceTool {
   override canRun(): boolean {
-    return this.llm.resolve("videoRec") != null;
+    return super.canRun() && this.llm.resolve("videoRec") != null;
   }
 
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "VideoDescribe",
@@ -53,9 +52,9 @@ export class VideoDescribe extends BaseWorkspaceTool {
         },
       },
     };
-  }
 
-  async run(args: Record<string, unknown>, cwd: string, signal?: AbortSignal): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+    const cwd = this.cwd() ?? "";
     const p = String(args.path ?? "");
     if (!p) return { ok: false, output: `VideoDescribe rejected: missing required "path". Example: {"path":"/workspace/assets/clip.mp4"}` };
     if (!this.llm.resolve("videoRec")) {

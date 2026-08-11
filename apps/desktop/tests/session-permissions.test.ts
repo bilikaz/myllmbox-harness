@@ -40,19 +40,17 @@ async function localContainer(): Promise<string> {
 beforeEach(reset);
 
 describe("sessionToolModes", () => {
-  it("masks the workspace for a chat-only agent — placement is never a grant", async () => {
+  it("a Local container exposes the fs tools — the container type IS the grant (task4)", async () => {
+    // task4 reversed the old "placement is never a grant": there is no agent workspace opt-out anymore.
+    // A session in a Local container gets the fs tools at their per-tool defaults, gated only by the
+    // agent's tool ceiling — the container type decides availability.
     const cid = await localContainer();
-    const agentId = addAgent("joker", { workspace: false });
+    const agentId = addAgent("joker", {});
     const sid = createSession({ containerId: cid, agentId });
     const modes = await modesFor(sid);
-    const entries = Object.entries(modes);
-    expect(entries.length).toBeGreaterThan(0);
-    // Workspace (fs) tools are masked to 0 — placement grants nothing. A permissioned tool that needs NO
-    // workspace (Fetch — arbitrary HTTP) is workspace-independent, so it stays available even in chat.
-    for (const [name, m] of entries) {
-      if (name === "Fetch") expect(m).toBe(1); // ask, available
-      else expect(m).toBe(0);
-    }
+    expect(modes.Read).toBe(2); // fs tool, available at its default
+    expect(modes.Delete).toBe(1); // fs tool, default "ask"
+    expect(modes.Fetch).toBe(1); // non-fs permissioned tool, also available
   });
 
   it("applies min(workspace policy, ceiling) for a workspace agent", async () => {

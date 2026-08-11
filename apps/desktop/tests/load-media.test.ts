@@ -10,8 +10,8 @@ import { createClient } from "../src/llm/index.ts";
 
 // Loaders only touch cwd; the llm client is unused, so a null-resolver client suffices.
 const llm = createClient({ resolve: () => null });
-const loadImageTool = { execute: (args: Record<string, unknown>, { cwd }: { cwd: string }) => new ImageLoad(llm).run(args, cwd) };
-const loadVideoTool = { execute: (args: Record<string, unknown>, { cwd }: { cwd: string }) => new VideoLoad(llm).run(args, cwd) };
+const loadImageTool = { execute: (args: Record<string, unknown>, { cwd }: { cwd: string }) => new ImageLoad(llm, ({ type: "local", config: { root: cwd } }) as any).execute(args) };
+const loadVideoTool = { execute: (args: Record<string, unknown>, { cwd }: { cwd: string }) => new VideoLoad(llm, ({ type: "local", config: { root: cwd } }) as any).execute(args) };
 
 let root: string;
 const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);

@@ -59,7 +59,8 @@ export abstract class ComicsGenerateBase extends BaseWorkspaceTool {
     return true; // the attempt ledger is the file count — one generation per step keeps it race-free
   }
 
-  async run(args: Record<string, unknown>, cwd: string, signal?: AbortSignal, ctx?: ToolRunCtx): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, signal?: AbortSignal, ctx?: ToolRunCtx): Promise<ToolResult> {
+    const cwd = this.cwd() ?? "";
     const name = this.schema.function.name;
     const job = ctx?.meta?.generationJob as GenerationJob | undefined;
     const sid = ctx?.sessionId;

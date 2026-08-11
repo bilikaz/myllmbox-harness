@@ -10,15 +10,12 @@ import { errorMessage } from "../../../lib/errors.ts";
 // Developer-only: canRun() gates on config.app.developerMode, so it isn't even advertised to regular users.
 export class RunScript extends BaseWorkspaceTool {
   override canRun(): boolean {
-    return this.config().app.developerMode === true;
+    return super.canRun() && this.config().app.developerMode === true;
   }
 
-  override defaultPermission(): ToolPermission {
-    return 1; // arbitrary code — ask by default
-  }
+  override defaultPermission: ToolPermission = 1; // arbitrary code — ask by default
 
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "RunScript",
@@ -38,9 +35,9 @@ export class RunScript extends BaseWorkspaceTool {
         },
       },
     };
-  }
 
-  async run(args: Record<string, unknown>, cwd: string, signal?: AbortSignal): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+    const cwd = this.cwd() ?? "";
     const p = String(args.path ?? "");
     if (!p) return { ok: false, output: `RunScript rejected: missing required "path".` };
     let scriptPath: string;

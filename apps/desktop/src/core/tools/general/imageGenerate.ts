@@ -15,8 +15,7 @@ export class ImageGenerate extends BaseGeneralTool {
     return true; // one generation per step — parallel copies collide on output names / hammer the server
   }
 
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "ImageGenerate",
@@ -64,9 +63,9 @@ export class ImageGenerate extends BaseGeneralTool {
         },
       },
     };
-  }
 
-  async run(args: Record<string, unknown>, cwd?: string, signal?: AbortSignal, ctx?: ToolRunCtx): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, signal?: AbortSignal, ctx?: ToolRunCtx): Promise<ToolResult> {
+    const cwd = this.cwd();
     const prompt = String(args.prompt ?? "").trim();
     if (!prompt) return { ok: false, output: `ImageGenerate rejected: missing required "prompt".` };
 

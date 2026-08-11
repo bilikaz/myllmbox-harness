@@ -4,6 +4,7 @@ import { createListeners } from "./storage/consumer.ts";
 import { newId } from "./ids.ts";
 import type { StorageEngine } from "./storage/engine.ts";
 import type { Ctx } from "./ctx.ts";
+import type { ContainerType } from "./containers.ts";
 import { type ToolName, type ToolPermission } from "./tools/types.ts";
 import { rootLog } from "../lib/logger/index.ts";
 import { errorMessage } from "../lib/errors.ts";
@@ -25,7 +26,9 @@ export interface Agent {
   description: string;
   system: string;
   user: string;
-  workspace: boolean;
+  // The conversation container types this agent runs in (task4). Undefined = any conversation (chat +
+  // local). `["local"]` = needs a workspace — the agent is offered/runs only in a Local container.
+  containers?: ContainerType[];
   tools: AgentTools;
   // Set on plugin-provided agents (from plugins/<slug>/agents.json). These are CODE, not stored rows —
   // they live in a runtime-gated registry (like tools/UI/graphs), resolved by getAgent and shown only
@@ -47,7 +50,6 @@ const SEED: Agent[] = [
       "family-friendly joke about it — setup and punchline, nothing else. No explanations, no 'here's a joke' preamble. " +
       "If the topic is in another language, joke in that language.",
     user: "Tell me a joke about programmers.",
-    workspace: false,
     tools: { ...AGENT_TOOLS_DEFAULT },
   },
 ];
@@ -59,7 +61,7 @@ function normalize(p: Partial<Agent>): Agent {
     description: p.description ?? "",
     system: p.system ?? "",
     user: p.user ?? "",
-    workspace: p.workspace === true,
+    containers: p.containers,
     tools: { ...AGENT_TOOLS_DEFAULT, ...(p.tools ?? {}) },
     ownerPluginId: p.ownerPluginId,
     listed: p.listed === true,
@@ -127,11 +129,14 @@ export const getAgents = (): Agent[] => agents;
 // reviewer agents by id even though they were never stored. Plugin agents stay OUT of getAgents() (the
 // orchestrator catalog) — they're internal to their graph.
 export const getAgent = (id: string): Agent | undefined => agents.find((a) => a.id === id) ?? pluginAgents.find((a) => a.id === id);
-export const agentsForContext = (hasWorkspace: boolean): Agent[] => agents.filter((a) => hasWorkspace || !a.workspace);
+// Agents available in a conversation container type: those with no `containers` (any conversation) or that
+// list this type. task4 — replaces the old hasWorkspace gate (a "local"-only agent is hidden off-workspace).
+export const agentsForContext = (type: ContainerType | undefined): Agent[] =>
+  agents.filter((a) => !a.containers || (type != null && a.containers.includes(type)));
 
 // ── Commands ───────────────────────────────────────────────────────────────
 export function createAgent(name: string): string {
-  const a: Agent = { id: newId(), name, description: "", system: "", user: "", workspace: false, tools: { ...AGENT_TOOLS_DEFAULT } };
+  const a: Agent = { id: newId(), name, description: "", system: "", user: "", tools: { ...AGENT_TOOLS_DEFAULT } };
   agents = [...agents, a];
   reg.notify();
   persist(a.id);

@@ -1,11 +1,12 @@
-// The tool registry: a folder of eager-globbed modules → pre-instantiated tools by name.
+// The tool registry: a folder of eager-globbed modules → tool FACTORIES by name. It registers and resolves;
+// it does NOT execute. Resolution (building a BaseTool for a container) happens in filter()/resolve();
+// execution — the AbortController map, arg parsing, cancellation — lives in the runner, not here.
 // Each process supplies its own glob (a literal path, so its bundle only pulls that folder).
 
 import { BaseTool, type ToolCtor, type ToolFactory } from "./base.ts";
-import { type ToolCallRequest, type ToolResult, type ToolFilterParams, type ToolFilterResult, type ToolFilterEntry } from "./types.ts";
+import type { ToolFilterParams } from "./types.ts";
 import type { Config } from "../config/index.ts";
 import type { Container } from "../containers.ts";
-import { errorMessage } from "../../lib/errors.ts";
 
 // A tool globbed from src/plugins/<slug>/tools/... is OWNED by that plugin; core tools have no owner.
 // The owner is read off the glob path so the registry can drop a disabled plugin's tools.
@@ -15,15 +16,8 @@ function ownerFromPath(path: string): string | undefined {
 
 export class ToolRegistry {
   readonly byName = new Map<string, ToolFactory>();
-  readonly running = new Map<string, AbortController>();
   // tool name → owning plugin slug (only for plugin-contributed tools).
   private readonly owners = new Map<string, string>();
-  // The active container for the in-flight filter()/run() — the registry OWNS it (assigned at resolution),
-  // and hands its live getter to every tool (globbed below + runtime factories). `!`: a tool only reads
-  // container() while serving a call (by which point it's assigned), never at build time.
-  private current!: Container;
-  // The one getter every tool gets — reads `current` lazily, so it resolves to the call's container.
-  readonly container = (): Container => this.current;
 
   constructor(
     private readonly config: () => Config,
@@ -39,8 +33,8 @@ export class ToolRegistry {
 
         const ctor = v as ToolCtor;
         // A globbed class is registered as a factory — the one `new` lives inside `make`, so globbed and
-        // runtime (MCP) tools share the SAME build path (resolution elsewhere). The name is derived from the
-        // class STATIC schema (`ctor.schema.function.name`), never by constructing — no container here.
+        // runtime (MCP) tools share the SAME build path (resolution in filter()/resolve()). The name is read
+        // off the class STATIC schema (`ctor.schema.function.name`), never by constructing — no container here.
         this.register(ctor.schema.function.name, (config, container) => new ctor(config, container), owner);
       }
     }
@@ -53,6 +47,10 @@ export class ToolRegistry {
     return owner ? !!this.config().plugins[owner]?.enabled : true;
   }
 
+  // Resolve every registered factory against the call's container, gate it (disabled-plugin, canRun,
+  // permission), cache each survivor's currentPermission, and return them keyed by name. The returned tools
+  // are live BaseTool instances bound to `params.container`; the runner invokes `tools[name].run(call)` and
+  // the electron adapter re-wraps them into the serializable wire shape.
   filter(params: ToolFilterParams): Record<string, BaseTool> {
     const tools: Record<string, BaseTool> = {};
     for (const make of this.byName.values()) {
@@ -74,10 +72,16 @@ export class ToolRegistry {
     return tools;
   }
 
+  // Build ONE tool for a container by name, without gating — the runner/adapter uses this to execute a call
+  // whose permission was already decided at filter() time. Returns undefined for an unknown name.
+  resolve(name: string, container: Container): BaseTool | undefined {
+    return this.byName.get(name)?.(this.config, container);
+  }
+
   // Runtime tool registration — the first dynamic tool source (MCP servers, discovered at connect).
-  // Stores the FACTORY, not a built tool — resolution (calling `make`) happens per-call elsewhere, so the
-  // container is bound at call time rather than captured here. Name is supplied by the caller (we no longer
-  // build the tool to read `schema.function.name`). Owner-tagged so the disabled-plugin gate drops them.
+  // Stores the FACTORY, not a built tool — resolution (calling `make`) happens per-call in filter()/resolve(),
+  // so the container is bound at call time rather than captured here. Name is supplied by the caller (we no
+  // longer build the tool to read `schema.function.name`). Owner-tagged so the disabled-plugin gate drops them.
   register(name: string, make: ToolFactory, ownerPluginId?: string): void {
     this.byName.set(name, make);
     if (ownerPluginId) this.owners.set(name, ownerPluginId);
@@ -87,43 +91,4 @@ export class ToolRegistry {
     this.byName.delete(name);
     this.owners.delete(name);
   }
-/*
-  those 2 exist in llm calls or other walker runner not here as registry is for registry not for runners. the running logic is for runners
-
-  async run(call: ToolCallRequest): Promise<ToolResult | null> {
-    const tool = this.byName.get(call.name);
-    if (!tool) return null;
-    if (!this.ownerEnabled(call.name)) return { ok: false, output: `tool "${call.name}" belongs to a disabled plugin.` };
-    if (!tool.canRun()) return { ok: false, output: `tool "${call.name}" is not available for this model.` };
-    const controller = new AbortController();
-    if (call.id) this.running.set(call.id, controller);
-    let args: Record<string, unknown>;
-    try {
-      args = JSON.parse(call.arguments || "{}") as Record<string, unknown>;
-    } catch (e) {
-      return {
-        ok: false,
-        output: [
-          `tool call rejected: arguments are not valid JSON.`,
-          `Tool: ${call.name}`,
-          `Received arguments: ${call.arguments}`,
-          `Parse error: ${errorMessage(e)}`,
-          `Retry with a valid JSON object matching the tool's schema.`,
-        ].join("\n"),
-      };
-    }
-    try {
-      return await tool.run(args, controller.signal, { imageOutputDir: call.imageOutputDir, mediaRefs: call.mediaRefs, sessionId: call.sessionId, meta: call.meta, target: call.target });
-    } catch (e) {
-      return { ok: false, output: `error running ${call.name}: ${errorMessage(e)}` };
-    } finally {
-      if (call.id) this.running.delete(call.id);
-    }
-  }
-
-cancel(callId: string): void {
-    this.running.get(callId)?.abort();
-  }
-*/
-
 }

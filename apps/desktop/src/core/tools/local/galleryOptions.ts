@@ -31,8 +31,7 @@ export class GalleryOptions extends BaseTool {
     return hasPageRenderer();
   }
 
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "GalleryOptions",
@@ -50,9 +49,8 @@ export class GalleryOptions extends BaseTool {
         },
       },
     };
-  }
 
-  async run(args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>): Promise<ToolResult> {
     const count = Number(args.count);
     if (!Number.isFinite(count)) {
       const byCount = supportedCounts()

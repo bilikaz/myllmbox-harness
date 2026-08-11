@@ -5,7 +5,7 @@
 // and composes per step; the banner recomposes from session state when no live capture exists.
 
 import type { Ctx } from "../ctx.ts";
-import { getContainer, type Container } from "../containers.ts";
+import { getContainer, ephemeralContainer, type Container } from "../containers.ts";
 import { getAgent, type Agent } from "../agents.ts";
 import { getAppConfig } from "../config/index.ts";
 import { fill, pt } from "../prompts.ts";
@@ -15,7 +15,7 @@ import { browserFleet } from "../browser.ts";
 import { engineToolSchemas } from "../tools/engine/dispatch.ts";
 import type { EngineCtx } from "../tools/engine/base.ts";
 import { RUN_AGENT } from "../tools/helpers/agents/catalog.ts";
-import type { ToolFilterResult, ToolName, ToolPermission, ToolSpec } from "../tools/types.ts";
+import type { ToolFilterResult, ToolSpec } from "../tools/types.ts";
 import type { Session } from "./types.ts";
 
 export function baseSystemFor(session: Session | undefined): string {
@@ -23,11 +23,13 @@ export function baseSystemFor(session: Session | undefined): string {
   return fill(session?.system || containerMessage || getAppConfig().systemPrompt || pt("defaultChat.system"));
 }
 
-// Which workspace + agent identity a session runs under (agents may opt out of the workspace).
+// Which workspace + agent identity a session runs under. The workspace is purely the container type now
+// (a Local container is the workspace); the old agent workspace opt-out is gone — a conversation agent run
+// in a Local session gets the fs tools, like any other conversation session.
 export function capabilityContext(session: Session | undefined): { ws: Container | undefined; agent: Agent | undefined } {
   const agent = session?.agentId ? getAgent(session.agentId) : undefined;
   const container = getContainer(session?.containerId);
-  const ws = agent && !agent.workspace ? undefined : container?.type === "local" ? container : undefined;
+  const ws = container?.type === "local" ? container : undefined;
   return { ws, agent };
 }
 
@@ -35,33 +37,38 @@ export function capabilityContext(session: Session | undefined): { ws: Container
 // registry tools + ceiling-clamped engine specs, and the access flags the capability blocks gate on.
 export interface SessionCapabilities {
   ws?: Container;
+  container: Container; // the session's container (or an ephemeral chat fallback) — passed to tools.run()
   agent?: Agent;
   isChild: boolean;
   filtered: ToolFilterResult;
   toolSpecs: ToolSpec[];
   fsAccess: boolean;
+  wsToolNames: string[]; // the workspace (fs) tool names, for the workspace system-prompt block
   browserAccess: boolean;
 }
 
 export async function capabilitiesFor(app: Ctx, session: Session | undefined, signal?: AbortSignal): Promise<SessionCapabilities> {
   const { ws, agent } = capabilityContext(session);
   const isChild = !!session?.parentId;
-  const filtered = await app.tools.filter({
-    checkCanRun: true,
-    hasWorkspace: !!ws,
-    workspacePermissions: ws?.permissions as Record<ToolName, ToolPermission> | undefined,
-    agentPermissions: agent?.tools,
-  });
+  const container = getContainer(session?.containerId) ?? ephemeralContainer();
+  const filtered = await app.tools.filter({ checkCanRun: true, container, agentPermissions: agent?.tools });
+  // Workspace (fs) tools (for the prompt block) = those a non-workspace container wouldn't advertise. Isolate
+  // the container-gate effect by re-filtering under a chat container (same permissions) and diffing — canRun
+  // is the gate now.
+  const baseline = ws ? await app.tools.filter({ checkCanRun: true, container: ephemeralContainer("chat", container.permissions), agentPermissions: agent?.tools }) : undefined;
+  const wsToolNames = baseline ? Object.keys(filtered).filter((n) => !(n in baseline)) : [];
   const ceiling = (n: string): number => (agent?.tools ? (agent.tools[n] ?? agent.tools["*"] ?? 2) : 2);
   const ec: EngineCtx = { ctx: app, sessionId: session?.id ?? "", workspace: ws, signal: signal ?? new AbortController().signal, isChild, engine: app.sessions };
   const engineSpecs = engineToolSchemas(ec).filter((t) => ceiling(t.function.name) > 0);
   return {
     ws,
+    container,
     agent,
     isChild,
     filtered,
     toolSpecs: [...Object.values(filtered).map((e) => e.schema as ToolSpec), ...engineSpecs],
-    fsAccess: Object.values(filtered).some((e) => e.needsWorkspace),
+    fsAccess: wsToolNames.length > 0,
+    wsToolNames,
     browserAccess: !isChild && browserFleet().available(),
   };
 }
@@ -72,9 +79,7 @@ export async function capabilitiesFor(app: Ctx, session: Session | undefined, si
 // exists ONCE — the wire and the banner both render it.
 export function composeSystem(session: Session | undefined, caps: SessionCapabilities): string | undefined {
   const has = (n: string): boolean => caps.toolSpecs.some((t) => t.function.name === n);
-  const wsTools = Object.values(caps.filtered)
-    .filter((e) => e.needsWorkspace)
-    .map((e) => e.name);
+  const wsTools = caps.wsToolNames;
   return (
     [
       baseSystemFor(session),

@@ -4,6 +4,7 @@
 import { Ctx } from "../core/ctx.ts";
 import { hydrateConsumers } from "../core/storage/consumer.ts";
 import { ToolRegistry } from "../core/tools/registry.ts";
+import { ToolRunner, projectTools } from "../core/tools/runner.ts";
 import { initAppConfig } from "../core/config/app.ts";
 import { initSettings } from "../core/settings.ts";
 import { initPluginsConfig, installEnabledPlugins } from "../core/plugins/config.ts";
@@ -86,11 +87,14 @@ export async function init(): Promise<Ctx> {
   await hydrateAgents();
   await hydrateSessions();
 
+  // Web runs tools in-process: the registry resolves each factory against the call's container, the runner
+  // dispatches, and projectTools flattens resolved instances to the serializable wire shape the UI reads.
   const reg = new ToolRegistry(() => ctx.config, MODULES);
+  const runner = new ToolRunner(reg);
   ctx.tools = {
-    filter: (params) => reg.filter(params),
-    run: (call) => reg.run(call),
-    cancel: (id) => reg.cancel(id),
+    filter: (params) => projectTools(reg.filter(params)),
+    run: (call, container) => runner.run(call, container),
+    cancel: (id) => runner.cancel(id),
   };
   ctx.api = browserHost();
   browserFleet().bindHostEvents(); // no-op on the web host (no fleet), kept symmetric with electron

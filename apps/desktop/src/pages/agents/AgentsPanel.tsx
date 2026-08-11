@@ -16,11 +16,11 @@ export function AgentsPanel() {
   const route = useRoute();
   const plugins = usePluginsConfig();
   const activeType = getContainer(activeContainerId)?.type;
-  const inWorkspace = activeType === "local";
   // User agents + plugin agents whose owning plugin is enabled AND that declare themselves general-purpose
   // (`listed` in agents.json) — undeclared plugin agents are internal graph workers, never catalog entries.
   const pluginVisible = getPluginAgents().filter((a) => a.listed && plugins[a.ownerPluginId ?? ""]?.enabled);
-  const visible = [...agents, ...pluginVisible].filter((a) => inWorkspace || !a.workspace);
+  // Show an agent when it supports the active container type (no `containers` = any conversation).
+  const visible = [...agents, ...pluginVisible].filter((a) => !a.containers || (activeType != null && a.containers.includes(activeType)));
 
   function addNew() {
     const id = createAgent(t("agents.untitled"));

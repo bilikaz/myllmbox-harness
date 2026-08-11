@@ -1,7 +1,8 @@
 import { createClient, type LLMClient } from "../../llm/index.ts";
 import type { Config } from "../config/index.ts";
 import type { Container } from "../containers.ts";
-import { type ToolResult, type ToolSpec, type ToolPermission, type ToolRunCtx } from "./types.ts";
+import { type ToolResult, type ToolSpec, type ToolPermission, type ToolRunCtx, type ToolCallRequest } from "./types.ts";
+import { errorMessage } from "../../lib/errors.ts";
 
 // Largest tool output handed back to the model — a runaway command can't blow its context.
 export const OUTPUT_CAP = 64 * 1024;
@@ -17,21 +18,18 @@ export function cap(s: string): string {
 // or is a plugin, but every tool can read config: the model client is derived from config.llm on use (see
 // `llm`), plugin tools read config.plugins.<slug>, others read config.app.
 export abstract class BaseTool {
-
+  // The tool default (mode when the workspace hasn't set one) and the resolved current permission. Plain
+  // fields: tools are built fresh per call (registry.filter/resolve), so a dynamic default can be computed in
+  // the constructor, and currentPermission is (re)set by calculatePermission before anything reads it.
   defaultPermission: ToolPermission = 2;
   currentPermission: ToolPermission = 0;
-  // Both are GETTERS re-seeded per call by the dispatcher (tools are built once at boot — no container
-  // exists then). `container()` is undefined when nothing is in context (boot / between calls / a call
-  // without one) — the no-workspace state: `canRun` gates off and `cwd()` is undefined via `?.`.
+
+  // `config` is a getter (config is reactive — a snapshot would go stale); `container` is a direct value, the
+  // one this tool was built for. Tools are no longer built once at boot: the registry builds a fresh instance
+  // per call bound to that call's container, so there is no "no container" state to guard.
   constructor(protected readonly config: () => Config, protected readonly container: Container) {}
 
-/// wtf is this?????? issue to inspect 
-// undefined is a real, first-class case — and it's exactly why container must be a getter, not a direct value: tools are constructed once at boot, long before any session/container exists, and the getter is re-seeded per call. So container: Container can't work; it's container: () => Container | undefined.
-// It returns undefined when: at boot / between calls (nothing seeded yet), or a call carried no container. And that state is meaningful — "no container in context" = no workspace:
-
-
-  // The active workspace root — the Local container's `config.root`; undefined for any other/none.
-  // Replaces the old `cwd` param threaded into every tool's run().
+  // The active workspace root — the Local container's `config.root`; undefined for any other type.
   protected cwd(): string | undefined {
     return (this.container.config as { root?: string } | undefined)?.root;
   }
@@ -50,9 +48,49 @@ export abstract class BaseTool {
     );
   }
 
-  abstract get schema(): ToolSpec;
+  // The model-facing tool spec. Globbed tools declare it once as `static readonly schema` and inherit this
+  // getter, which reads the static off the concrete class; a tool with a per-instance schema (e.g. MCP, whose
+  // name is descriptor-derived) overrides this getter instead.
+  get schema(): ToolSpec {
+    return (this.constructor as unknown as ToolCtor).schema;
+  }
 
-  abstract run(args: Record<string, unknown>, signal?: AbortSignal, ctx?: ToolRunCtx): Promise<ToolResult>;
+  // The execution entrypoint the runner invokes as `tools[name].run(call)`. Parses the model's JSON args off
+  // the call, builds the per-call ctx from it, runs the tool's work (`execute`), and wraps a bad-JSON or
+  // thrown failure as a tool result. The AbortController and cancellation are the runner's — a signal can't
+  // cross the bridge, so it rides in as a param.
+  async run(call: ToolCallRequest, signal?: AbortSignal): Promise<ToolResult> {
+    let args: Record<string, unknown>;
+    try {
+      args = JSON.parse(call.arguments || "{}") as Record<string, unknown>;
+    } catch (e) {
+      return {
+        ok: false,
+        output: [
+          `tool call rejected: arguments are not valid JSON.`,
+          `Tool: ${call.name}`,
+          `Received arguments: ${call.arguments}`,
+          `Parse error: ${errorMessage(e)}`,
+          `Retry with a valid JSON object matching the tool's schema.`,
+        ].join("\n"),
+      };
+    }
+    try {
+      return await this.execute(args, signal, {
+        imageOutputDir: call.imageOutputDir,
+        mediaRefs: call.mediaRefs,
+        sessionId: call.sessionId,
+        meta: call.meta,
+        target: call.target,
+      });
+    } catch (e) {
+      return { ok: false, output: `error running ${call.name}: ${errorMessage(e)}` };
+    }
+  }
+
+  // A tool's actual work — implemented by every concrete tool. Args are already parsed; ctx carries the
+  // per-call extras (image output dir, media refs, session id/meta, model target). `run()` is the entrypoint.
+  abstract execute(args: Record<string, unknown>, signal?: AbortSignal, ctx?: ToolRunCtx): Promise<ToolResult>;
 
   // Resolve this tool's current permission and cache it on `currentPermission`. Workspace policy and the
   // tool default both live on `this` (container + defaultPermission); the agent ceiling is the one external
@@ -69,7 +107,7 @@ export abstract class BaseTool {
     this.currentPermission = Math.min(wsPermission, agentPermission) as ToolPermission;
   }
   // Whether this tool is available in the current context — model capability / configured slot AND the
-  // active container type (a workspace tool overrides to `this.container()?.type === "local"`). The
+  // active container type (a workspace tool overrides to `this.container.type === "local"`). The
   // advertisement filter and run() both consult it; a container-gated tool is simply unavailable elsewhere.
   canRun(): boolean {
     return true;

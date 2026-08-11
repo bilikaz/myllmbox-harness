@@ -1,4 +1,5 @@
 import { agentsForContext, type Agent } from "../../../agents.ts";
+import type { ContainerType } from "../../../containers.ts";
 import { contextLimit, ensureLoaded, getSession, getSessions, getStreamingIds, getUserPausedIds } from "../../../sessions/store.ts";
 import { resolveMain } from "../../../settings.ts";
 import type { ErrorKind, Session } from "../../../sessions/types.ts";
@@ -267,27 +268,27 @@ export function failureNote(alias: number, name: string, kind: ErrorKind | undef
 // gets the workspace's file tools when there's a workspace, the live base system either way. The `workspace`
 // flag just mirrors the context so it lists everywhere.
 export const GENERAL_AGENT_ID = "general";
-function generalAgent(hasWorkspace: boolean): Agent {
+// No `containers` → the General agent lists in any conversation container (chat + local).
+function generalAgent(): Agent {
   return {
     id: GENERAL_AGENT_ID,
     name: "General agent",
     description: "A general-purpose helper with your own tools and context — give it any task to do on your behalf.",
     system: "",
     user: "",
-    workspace: hasWorkspace,
     tools: {},
   };
 }
 
-export function catalogAgents(hasWorkspace: boolean): Agent[] {
-  const stored = agentsForContext(hasWorkspace).filter((a) => a.name.trim());
+export function catalogAgents(type: ContainerType | undefined): Agent[] {
+  const stored = agentsForContext(type).filter((a) => a.name.trim());
   // Inject the built-in General agent unless the user already defined one by that name (theirs wins, no clash).
   const hasGeneral = stored.some((a) => normalizeName(a.name) === "general agent");
-  return hasGeneral ? stored : [generalAgent(hasWorkspace), ...stored];
+  return hasGeneral ? stored : [generalAgent(), ...stored];
 }
 
-export function agentToolSchemas(hasWorkspace: boolean): ToolSpec[] {
-  return catalogAgents(hasWorkspace).length ? [LIST_SCHEMA, RUN_SCHEMA] : [];
+export function agentToolSchemas(type: ContainerType | undefined): ToolSpec[] {
+  return catalogAgents(type).length ? [LIST_SCHEMA, RUN_SCHEMA] : [];
 }
 
 function catalogLines(agents: Agent[]): string {
@@ -296,8 +297,8 @@ function catalogLines(agents: Agent[]): string {
     .join("\n");
 }
 
-export function listAgentsOutput(hasWorkspace: boolean): string {
-  const agents = catalogAgents(hasWorkspace);
+export function listAgentsOutput(type: ContainerType | undefined): string {
+  const agents = catalogAgents(type);
   if (!agents.length) return "No agents are available in this context.";
   return (
     `Available agents:\n${catalogLines(agents)}\n\n` +
@@ -317,8 +318,8 @@ function normalizeName(s: string): string {
     .toLowerCase();
 }
 
-export function resolveAgent(name: string, hasWorkspace: boolean): Agent | string {
-  const agents = catalogAgents(hasWorkspace);
+export function resolveAgent(name: string, type: ContainerType | undefined): Agent | string {
+  const agents = catalogAgents(type);
   if (!agents.length) return "No agents are available in this context.";
   const wanted = normalizeName(name);
   const matches = agents.filter((a) => normalizeName(a.name) === wanted);

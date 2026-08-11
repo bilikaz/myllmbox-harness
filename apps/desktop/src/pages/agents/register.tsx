@@ -14,8 +14,8 @@ function AgentsRoute() {
 }
 
 register(
-  { region: "right-panel", id: "agents", order: 1, render: () => <AgentsPanel /> },
-  { region: "right-panel", id: "sub-agent-cleanup", order: 2, render: () => <SubAgentCleanup /> },
-  { region: "right-panel", id: "agent-permissions", order: 3, render: () => <AgentPermissionsPanel /> },
+  { region: "right-panel", id: "agents", order: 1, containers: ["chat", "local"], render: () => <AgentsPanel /> },
+  { region: "right-panel", id: "sub-agent-cleanup", order: 2, containers: ["chat", "local"], render: () => <SubAgentCleanup /> },
+  { region: "right-panel", id: "agent-permissions", order: 3, containers: ["chat", "local"], render: () => <AgentPermissionsPanel /> },
   { region: "main", id: "agents", route: "agents", render: () => <AgentsRoute /> },
 );

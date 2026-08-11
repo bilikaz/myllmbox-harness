@@ -14,12 +14,9 @@ export class Fetch extends BaseTool {
   override isPermissioned(): boolean {
     return true;
   }
-  override defaultPermission(): ToolPermission {
-    return 1; // ask
-  }
+  override defaultPermission: ToolPermission = 1; // ask
 
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "Fetch",
@@ -41,9 +38,8 @@ export class Fetch extends BaseTool {
         },
       },
     };
-  }
 
-  async run(args: Record<string, unknown>, _cwd?: string, signal?: AbortSignal): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
     const url = String(args.url ?? "").trim();
     if (!url) return { ok: false, output: 'Fetch needs a url, e.g. {"url":"https://api.example.com/v1/…"}.' };
     if (!/^https?:\/\//i.test(url)) return { ok: false, output: `Fetch rejected: "${url}" — url must be an absolute http(s) URL.` };

@@ -7,12 +7,9 @@ import { errorMessage } from "../../../lib/errors.ts";
 // Delete a file or folder within the workspace (fs.rm, recursive — pure Node, portable). The one destructive
 // file op, so it defaults to ask. Refuses to delete the workspace root itself.
 export class Delete extends BaseWorkspaceTool {
-  override defaultPermission(): ToolPermission {
-    return 1; // destructive — ask by default
-  }
+  override defaultPermission: ToolPermission = 1; // destructive — ask by default
 
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "Delete",
@@ -27,9 +24,9 @@ export class Delete extends BaseWorkspaceTool {
         },
       },
     };
-  }
 
-  async run(args: Record<string, unknown>, cwd: string): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+    const cwd = this.cwd() ?? "";
     const p = String(args.path ?? "");
     if (!p) return { ok: false, output: `Delete rejected: missing required "path".` };
     try {

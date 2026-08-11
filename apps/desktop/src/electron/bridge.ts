@@ -11,7 +11,7 @@ export interface ElectronApi {
   pickFolder(): Promise<string | null>;
   tools: {
     // The wire carries the config snapshot main seeds its Ctx from; the cwd rides on the call.
-    filter(wire: WireConfig, params?: ToolFilterParams): Promise<ToolFilterResult>;
+    filter(wire: WireConfig, params: ToolFilterParams): Promise<ToolFilterResult>;
     exec(call: ToolCallRequest, wire: WireConfig): Promise<ToolResult>;
     // Resolving says the cancel was DELIVERED, not that the tool has exited.
     cancel(callId: string): Promise<void>;

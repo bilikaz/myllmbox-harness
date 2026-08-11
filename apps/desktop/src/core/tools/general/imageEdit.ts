@@ -21,8 +21,7 @@ export class ImageEdit extends BaseGeneralTool {
     return true; // one edit per step — parallel copies collide on output names / hammer the server
   }
 
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "ImageEdit",
@@ -84,9 +83,9 @@ export class ImageEdit extends BaseGeneralTool {
         },
       },
     };
-  }
 
-  async run(args: Record<string, unknown>, cwd?: string, signal?: AbortSignal, ctx?: ToolRunCtx): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, signal?: AbortSignal, ctx?: ToolRunCtx): Promise<ToolResult> {
+    const cwd = this.cwd();
     const prompt = String(args.prompt ?? "").trim();
     if (!prompt) return { ok: false, output: `ImageEdit rejected: missing required "prompt".` };
     const entries = Array.isArray(args.references) ? args.references.filter((p): p is string => typeof p === "string" && p.trim() !== "").map((p) => p.trim()) : [];

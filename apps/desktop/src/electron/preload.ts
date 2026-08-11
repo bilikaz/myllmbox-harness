@@ -13,7 +13,7 @@ const api: ElectronApi = {
   pickFolder: () => ipcRenderer.invoke(IPC.pickFolder),
   tools: {
     // The wire is plain JSON (the config snapshot); main wraps it into its own Ctx and mints the signal/client.
-    filter: (wire: WireConfig, params?: ToolFilterParams) => ipcRenderer.invoke(IPC.toolsFilter, wire, params),
+    filter: (wire: WireConfig, params: ToolFilterParams) => ipcRenderer.invoke(IPC.toolsFilter, wire, params),
     exec: (call: ToolCallRequest, wire: WireConfig) => ipcRenderer.invoke(IPC.toolsExec, call, wire),
     cancel: (callId: string) => ipcRenderer.invoke(IPC.toolsCancel, callId),
   },

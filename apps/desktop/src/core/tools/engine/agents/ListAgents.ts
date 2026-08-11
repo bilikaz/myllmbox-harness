@@ -10,10 +10,10 @@ export class ListAgents extends BaseEngineTool {
   }
 
   override available(ec: EngineCtx): boolean {
-    return catalogAgents(!!ec.workspace).length > 0;
+    return catalogAgents(ec.workspace?.type).length > 0;
   }
 
   async run(_call: ToolCallRequest, ec: EngineCtx): Promise<EngineToolResult> {
-    return { output: listAgentsOutput(!!ec.workspace) };
+    return { output: listAgentsOutput(ec.workspace?.type) };
   }
 }

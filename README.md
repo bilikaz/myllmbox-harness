@@ -1,4 +1,4 @@
-# v84 harness
+# My LLM Box harness
 
 **Run a team of AI agents on your own machine, against your own models — and orchestrate them as code that runs like a chat.**
 
@@ -89,9 +89,6 @@ against LangGraph, Rivet, Mastra & the desktop chat clients → **[COMPARISON.md
   "waiting for a slot" indicator instead of a stall).
 - 🎨 **Generate media** — images and video from the chat, fed back to the agent so it
   can inspect what it made.
-- 🧠 **Memory + company knowledge** — connect an account and agents gain a shared,
-  **visibility-scoped** (shared vs. private) knowledgebase (hybrid sparse+dense RAG,
-  accent-insensitive) and persistent memory.
 - 🧱 **Build it for your needs** — one folder under `plugins/<slug>/` adds agent
   tools, settings, UI, and its own system-prompt guidance — first-party, in-tree.
   Wire in your database, your internal API, your team's workflow. (A SQL database
@@ -102,8 +99,7 @@ against LangGraph, Rivet, Mastra & the desktop chat clients → **[COMPARISON.md
 - ♻️ **Keeps long sessions going** — sessions auto-name themselves and auto-compact
   when they outgrow the context window.
 - 🔒 **Local-first & private** — built for the models **you** run: your hardware, no
-  per-token meter, no vendor lock-in. Connect the cloud only when *you* want shared
-  memory and company knowledge.
+  per-token meter, no vendor lock-in.
 
 All host-agnostic at the core: the **same renderer** runs as a pure web app and as an
 Electron desktop app; desktop-only powers (the file tools, the browser fleet) light
@@ -190,14 +186,14 @@ start) is [CLAUDE.md](CLAUDE.md).
 
 ## License
 
-Licensed under the **GNU Affero General Public License v3.0** ([LICENSE](LICENSE)) — © 2026 VBTECH.
+Licensed under the **GNU Affero General Public License v3.0** ([LICENSE](LICENSE)) — © 2026 My LLM Box.
 
 You may use, modify, run, and **commercially host it (including as a SaaS)**. The AGPL's
 network-copyleft is the catch: if you run a modified version for others over a network, you
 must make your modified source available to them under the AGPL — improvements flow back as code.
 
 **Commercial license.** To use it in a closed-source product/service without the AGPL's
-source-sharing obligations, contact **valdas@vbtech.eu**.
+source-sharing obligations, contact **info@myllmbox.com**.
 
 Contributions are welcome by pull request. Once outside contributions are accepted, a
 Contributor License Agreement will be required so the project can keep offering the commercial

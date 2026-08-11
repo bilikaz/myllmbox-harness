@@ -37,7 +37,7 @@ export function AgentPermissionsPanel() {
   const agent = agents.find((a) => a.id === session.agentId) ?? getPluginAgents().find((a) => a.id === session.agentId);
   const status = !agent
     ? t("agents.permissionsDeleted")
-    : agent.workspace
+    : agent.containers
       ? t("agents.permissionsWorkspace", { name: agent.name || t("agents.untitled") })
       : t("agents.permissionsChat", { name: agent.name || t("agents.untitled") });
 

@@ -29,8 +29,7 @@ export class MascotGenerate extends ComicsGenerateBase {
     return [...refs].sort((a, b) => (ROLE_ORDER[String(a.role)] ?? 9) - (ROLE_ORDER[String(b.role)] ?? 9));
   }
 
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "MascotGenerate",
@@ -77,5 +76,4 @@ export class MascotGenerate extends ComicsGenerateBase {
         },
       },
     };
-  }
 }

@@ -2,9 +2,21 @@
 import { describe, expect, it } from "vitest";
 
 import { cap, OUTPUT_CAP } from "../src/core/tools/base.ts";
-import { cancelTool, execTool } from "../src/electron/tools.ts";
+import { cancelTool, execTool, toolFilter } from "../src/electron/tools.ts";
+import { getConfig } from "../src/core/config/index.ts";
 
-const CTX = { cwd: "/tmp" };
+// The wire carries the config snapshot AND the call's container (main resolves the tool against it).
+const wireLocal = { config: getConfig(), container: { type: "local", config: { root: "/tmp" } } as any };
+
+describe("container gating (task4)", () => {
+  const wire = { config: getConfig() };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const names = (container?: any) => Object.keys(toolFilter(wire, { checkCanRun: true, container }));
+  it("a workspace fs tool surfaces only in a Local container", () => {
+    expect(names({ type: "local", config: { root: "/tmp" }, permissions: {} })).toContain("Read");
+    expect(names({ type: "chat", config: {}, permissions: {} })).not.toContain("Read"); // non-workspace container → no fs tools
+  });
+});
 
 describe("cap", () => {
   it("passes short output through untouched", () => {
@@ -22,19 +34,19 @@ describe("cap", () => {
 
 describe("execTool dispatcher", () => {
   it("rejects an empty tool name as an unknown tool", async () => {
-    const r = await execTool({ id: "c1", name: "", arguments: "{}" }, CTX);
+    const r = await execTool({ id: "c1", name: "", arguments: "{}" }, wireLocal);
     expect(r.ok).toBe(false);
     expect(r.output).toMatch(/unknown tool ""/);
   });
 
   it("rejects an unknown tool by name", async () => {
-    const r = await execTool({ id: "c2", name: "Nuke", arguments: "{}" }, CTX);
+    const r = await execTool({ id: "c2", name: "Nuke", arguments: "{}" }, wireLocal);
     expect(r.ok).toBe(false);
     expect(r.output).toMatch(/unknown tool "Nuke"/);
   });
 
   it("rejects malformed JSON arguments with the parse error and guidance", async () => {
-    const r = await execTool({ id: "c3", name: "Read", arguments: "{broken" }, CTX);
+    const r = await execTool({ id: "c3", name: "Read", arguments: "{broken" }, wireLocal);
     expect(r.ok).toBe(false);
     expect(r.output).toMatch(/not valid JSON/);
     expect(r.output).toMatch(/Retry with a valid JSON object/);
@@ -44,7 +56,7 @@ describe("execTool dispatcher", () => {
     // Read against a nonexistent cwd fails inside the tool, not as a throw.
     const r = await execTool(
       { id: "c4", name: "Read", arguments: JSON.stringify({ path: "/nope.txt" }) },
-      { cwd: "/definitely/not/a/real/dir" },
+      { config: getConfig(), container: { type: "local", config: { root: "/definitely/not/a/real/dir" } } as any },
     );
     expect(r.ok).toBe(false);
   });

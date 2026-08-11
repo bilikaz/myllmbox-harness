@@ -6,8 +6,7 @@ import { BaseWorkspaceTool } from "./base.ts";
 // Find — locate files by NAME (Grep searches contents). Glob with `*` (any run) and `?` (one char),
 // matched against the file's base name, case-insensitively: `*report*`, `report*`, `*.docx`, exact.
 export class Find extends BaseWorkspaceTool {
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "Find",
@@ -26,9 +25,9 @@ export class Find extends BaseWorkspaceTool {
         },
       },
     };
-  }
 
-  async run(args: Record<string, unknown>, cwd: string, signal?: AbortSignal): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+    const cwd = this.cwd() ?? "";
     const pattern = String(args.pattern ?? "");
     if (!pattern) return { ok: false, output: `Find rejected: missing required "pattern".` };
     const root = this.getRoot(cwd);

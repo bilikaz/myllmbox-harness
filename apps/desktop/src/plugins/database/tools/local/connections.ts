@@ -5,8 +5,7 @@ import { BaseDatabaseTool } from "./base.ts";
 // Read-only of config, permissionless. Never includes passwords. The engine tells the agent which SQL
 // dialect to write. The agent calls this to discover connection names to pass to DatabaseQuery.
 export class DatabaseConnections extends BaseDatabaseTool {
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "DatabaseConnections",
@@ -16,9 +15,8 @@ export class DatabaseConnections extends BaseDatabaseTool {
         parameters: { type: "object", additionalProperties: false, properties: {} },
       },
     };
-  }
 
-  async run(): Promise<ToolResult> {
+  async execute(): Promise<ToolResult> {
     const list = this.connections().map((c) => ({ name: c.name, engine: c.engine, host: c.host, port: c.port, database: c.database ?? null }));
     if (list.length === 0) return { ok: true, output: "No database connections are configured (add one in Settings → Plugins → Database)." };
     return { ok: true, output: JSON.stringify(list) };

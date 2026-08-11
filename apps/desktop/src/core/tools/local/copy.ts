@@ -12,8 +12,7 @@ import { errorMessage } from "../../../lib/errors.ts";
 // destination are created. Both ends are confined to /workspace. `from` also accepts a pasted-media alias
 // (img-N/vid-N): aliases are session-scoped, files are the cross-session currency — Copy is the converter.
 export class Copy extends BaseWorkspaceTool {
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "Copy",
@@ -32,9 +31,9 @@ export class Copy extends BaseWorkspaceTool {
         },
       },
     };
-  }
 
-  async run(args: Record<string, unknown>, cwd: string, _signal?: AbortSignal, ctx?: ToolRunCtx): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, _signal?: AbortSignal, ctx?: ToolRunCtx): Promise<ToolResult> {
+    const cwd = this.cwd() ?? "";
     const from = String(args.from ?? "");
     const to = String(args.to ?? "");
     if (!from || !to) return { ok: false, output: `Copy rejected: both "from" and "to" are required.` };

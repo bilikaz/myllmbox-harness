@@ -12,12 +12,9 @@ export class DatabaseQuery extends BaseDatabaseTool {
   override isPermissioned(): boolean {
     return true;
   }
-  override defaultPermission(): ToolPermission {
-    return 1; // ask
-  }
+  override defaultPermission: ToolPermission = 1; // ask
 
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "DatabaseQuery",
@@ -36,9 +33,8 @@ export class DatabaseQuery extends BaseDatabaseTool {
         },
       },
     };
-  }
 
-  async run(args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>): Promise<ToolResult> {
     const name = String(args.connection ?? "");
     const sql = String(args.sql ?? "");
     if (!sql.trim()) return { ok: false, output: "sql is required." };

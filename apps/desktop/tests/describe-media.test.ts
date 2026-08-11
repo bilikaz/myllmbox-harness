@@ -15,8 +15,8 @@ import type { CallTarget, ModelService } from "../src/llm/types.ts";
 function cfgWith(slots: Partial<Record<ModelService, CallTarget>>): () => Config {
   return () => ({ app: CONFIG_DEFAULTS, llm: slots, plugins: {} }) as unknown as Config;
 }
-const describeImageTool = { execute: (args: Record<string, unknown>, slots: Partial<Record<ModelService, CallTarget>>) => new ImageDescribe(cfgWith(slots)).run(args, root) };
-const describeVideoTool = { execute: (args: Record<string, unknown>, slots: Partial<Record<ModelService, CallTarget>>) => new VideoDescribe(cfgWith(slots)).run(args, root) };
+const describeImageTool = { execute: (args: Record<string, unknown>, slots: Partial<Record<ModelService, CallTarget>>) => new ImageDescribe(cfgWith(slots), ({ type: "local", config: { root } }) as any).execute(args) };
+const describeVideoTool = { execute: (args: Record<string, unknown>, slots: Partial<Record<ModelService, CallTarget>>) => new VideoDescribe(cfgWith(slots), ({ type: "local", config: { root } }) as any).execute(args) };
 
 let root: string;
 const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);

@@ -51,10 +51,11 @@ export async function init(): Promise<Ctx> {
   await hydrateAgents();
   await hydrateSessions();
 
-  // All tools run in MAIN, over the bridge; the config snapshot rides on each call.
+  // All tools run in MAIN, over the bridge; the config snapshot AND the call's container ride on each call
+  // (main resolves the tool against the container — a resolved instance can't cross the bridge).
   ctx.tools = {
     filter: (params) => api!.tools.filter({ config: ctx.config }, params),
-    run: (call) => api!.tools.exec(call, { config: ctx.config }),
+    run: (call, container) => api!.tools.exec(call, { config: ctx.config, container }),
     cancel: (id) => api!.tools.cancel(id),
   };
   // Desktop services come straight off the bridge (present because boot chose electron).

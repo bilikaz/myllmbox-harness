@@ -6,7 +6,7 @@ import type { Ctx } from "../ctx.ts";
 import { getAppConfig } from "../config/index.ts";
 import { denyApprovalsForSession } from "../approvals.ts";
 import { type Agent } from "../agents.ts";
-import { getActiveContainerId, getContainer, containerTarget } from "../containers.ts";
+import { getActiveContainerId, getContainer, getContainersByType, setActiveContainer, containerTarget, ephemeralContainer } from "../containers.ts";
 import { type ToolName, type ToolPermission } from "../tools/types.ts";
 import { deliveryNudge } from "../prompts.ts";
 import { GET_AGENT_CONTENT, aliasOf, childrenOf, collectAgentContent } from "../tools/helpers/agents/catalog.ts";
@@ -205,7 +205,7 @@ export class SessionEngine {
       for (const [cid, n] of entries) this.enqueueDelivery(parentSid, cid, n); // raced busy/gone — turn:end re-pumps
       return;
     }
-    const call: ToolCallRequest = { id: crypto.randomUUID(), name: GET_AGENT_CONTENT, arguments: JSON.stringify({ ids: aliases }), cwd: "" };
+    const call: ToolCallRequest = { id: crypto.randomUUID(), name: GET_AGENT_CONTENT, arguments: JSON.stringify({ ids: aliases }) };
     bus.emit("turn:deliver", { sessionId: parentSid, call, output, childSessionIds: childIds.length ? childIds : undefined });
     for (const cid of childIds) setDelivered(cid, true); // their result is now in the parent's transcript — a boot won't re-deliver
     const result = await this.drive(parentSid, {}, { firstExchange: false, autoName: false, userText: "" });
@@ -266,17 +266,18 @@ export class SessionEngine {
   // The per-tool modes exactly as the turn loop computes them — includeDisabled so the UI lists gated tools
   // that are currently off. Async: in electron the gateway resolves the policy in main over the bridge.
   async sessionToolModes(session: Session): Promise<Record<ToolName, ToolPermission>> {
-    const { ws, agent } = capabilityContext(session);
+    const { agent } = capabilityContext(session);
+    const container = getContainer(session.containerId) ?? ephemeralContainer();
     const filtered = await this.ctx.tools.filter({
-      hasWorkspace: !!ws,
-      workspacePermissions: ws?.permissions as Record<ToolName, ToolPermission> | undefined,
+      checkCanRun: true, // apply the container gate (canRun) — fs tools only surface in a Local container
+      container,
       agentPermissions: agent?.tools,
       includeDisabled: true,
     });
     return Object.fromEntries(
       Object.values(filtered)
         .filter((e) => e.permissioned)
-        .map((e) => [e.name, e.effectiveMode]),
+        .map((e) => [e.name, e.currentPermission]),
     ) as Record<ToolName, ToolPermission>;
   }
 
@@ -305,6 +306,15 @@ export class SessionEngine {
   // Composer-facing send: targets the active session.
   async send(text: string, opts: SendOptions = {}): Promise<void> {
     await this.sendTo(getActiveId(), text, opts);
+  }
+
+  // The ONE turn entry the composer calls — routes on the active session's container type: media types run
+  // the media tool (no LLM), everything else is a normal send (drive() then handles graph/loop). Replaces
+  // the composer branching between send and generate.
+  async dispatch(text: string, atts: Attachments = {}): Promise<void> {
+    const type = getContainer(getSession(getActiveId())?.containerId)?.type;
+    if (type === "image" || type === "video") return this.generate(text, atts);
+    await this.send(text, atts);
   }
 
   // A generation turn (task 3): an image/video session's composer sends to its media pool, NOT the LLM.
@@ -343,8 +353,8 @@ export class SessionEngine {
 
       const callId = crypto.randomUUID();
       this.genCalls.set(sid, callId);
-      const call: ToolCallRequest = { id: callId, name, arguments: JSON.stringify(args), cwd: "", target, mediaRefs };
-      const res = await this.ctx.tools.run(call);
+      const call: ToolCallRequest = { id: callId, name, arguments: JSON.stringify(args), target, mediaRefs };
+      const res = await this.ctx.tools.run(call, getContainer(session.containerId) ?? ephemeralContainer());
       if (this.genCancelled.has(sid)) dropGenerationPlaceholder(sid); // user Stop: not a failure
       else if (res?.images?.length || res?.videos?.length) completeGeneration(sid, { images: res.images, videos: res.videos });
       else failGeneration(sid, res?.output ?? `${name} produced no output.`);
@@ -374,11 +384,19 @@ export class SessionEngine {
     opts: SendOptions & { parentId?: string; containerId?: string; activate?: boolean } = {},
   ): { sid: string; result: Promise<TurnResult | null> } {
     const { parentId, containerId, activate, ...sendOpts } = opts;
+    // Agents are a conversation concern — never create one in a generation container. If the resolved
+    // container is media (image/video), route the run to a chat container (activate it too, so the run is
+    // visible where it lands). Sub-agents pass their parent's container, which is already conversation.
+    const requested = containerId !== undefined ? containerId : getActiveContainerId() ?? "";
+    const requestedType = getContainer(requested)?.type;
+    const routed = requestedType === "image" || requestedType === "video";
+    const homeId = routed ? (getContainersByType("chat")[0]?.id ?? requested) : requested;
+    if (routed && activate && homeId) setActiveContainer(homeId);
     const sid = createSession(
       {
         title: agent.name,
         system: agent.system,
-        containerId: containerId !== undefined ? containerId : getActiveContainerId() ?? "",
+        containerId: homeId,
         agentId: agent.id,
         parentId,
       },
@@ -525,13 +543,13 @@ export class SessionEngine {
   async loadFiles(sid: string, files: string[] | undefined): Promise<void> {
     const paths = [...new Set((files ?? []).filter((p) => p.startsWith("/")))];
     if (!paths.length || !this.ctx.tools) return;
-    const root = (getContainer(getSession(sid)?.containerId)?.config.root as string | undefined) ?? "";
     const isImage = (p: string): boolean => /\.(png|jpe?g|webp|gif)$/i.test(p);
-    const calls = paths.map((path) => ({ id: crypto.randomUUID(), name: isImage(path) ? "ImageLoad" : "Read", arguments: JSON.stringify({ path }), cwd: root, path }));
+    const calls = paths.map((path) => ({ id: crypto.randomUUID(), name: isImage(path) ? "ImageLoad" : "Read", arguments: JSON.stringify({ path }), path }));
     setLastToolCalls(sid, calls.map(({ path: _p, ...call }) => call));
     const maxDim = resolveMain()?.imageMaxDim;
+    const container = getContainer(getSession(sid)?.containerId) ?? ephemeralContainer();
     for (const c of calls) {
-      const res = await this.ctx.tools.run({ id: c.id, name: c.name, arguments: c.arguments, cwd: root });
+      const res = await this.ctx.tools.run({ id: c.id, name: c.name, arguments: c.arguments }, container);
       const images = res?.images?.length
         ? await Promise.all(res.images.map(async (g) => {
             const d = maxDim ? await downscaleImage(g.url, g.mime ?? "", maxDim) : undefined;

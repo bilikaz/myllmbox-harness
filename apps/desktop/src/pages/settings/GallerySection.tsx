@@ -5,6 +5,7 @@ import { useCtx } from "../../renderer/ctx.tsx";
 import { openLightbox } from "../../core/ui.ts";
 import { LAYOUTS, supportedCounts } from "../../core/gallery/catalog.ts";
 import { newId } from "../../core/ids.ts";
+import { ephemeralContainer } from "../../core/containers.ts";
 
 // The user's layout browser: every gallery layout as preview + handle + name, grouped by image count;
 // click opens the full-size preview in the lightbox — so the user knows exactly what to ask the agent
@@ -20,7 +21,7 @@ export function GallerySection() {
     void (async () => {
       for (const count of supportedCounts()) {
         try {
-          const res = await ctx.tools.run({ id: newId(), name: "GalleryOptions", arguments: JSON.stringify({ count }), cwd: "" });
+          const res = await ctx.tools.run({ id: newId(), name: "GalleryOptions", arguments: JSON.stringify({ count }) }, ephemeralContainer());
           if (!live) return;
           if (!res?.ok || !res.images) {
             setError(res?.output ?? t("gallery.unavailable"));

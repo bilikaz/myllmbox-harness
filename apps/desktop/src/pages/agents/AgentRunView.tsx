@@ -22,7 +22,8 @@ export function AgentRunView({ id }: { id: string }) {
     );
   }
   const activeType = getContainer(activeContainerId)?.type;
-  const needsWorkspace = agent.workspace && activeType !== "local";
+  // The agent can't run here if it restricts its containers and the active type isn't among them.
+  const needsWorkspace = !!agent.containers && (activeType == null || !agent.containers.includes(activeType));
 
   function run(text: string, atts: Attachments) {
     if (!agent) return;

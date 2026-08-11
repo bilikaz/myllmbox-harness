@@ -22,8 +22,7 @@ export class PanelGenerate extends ComicsGenerateBase {
     return null;
   }
 
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "PanelGenerate",
@@ -69,5 +68,4 @@ export class PanelGenerate extends ComicsGenerateBase {
         },
       },
     };
-  }
 }

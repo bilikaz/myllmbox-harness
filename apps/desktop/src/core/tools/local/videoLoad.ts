@@ -18,11 +18,10 @@ export class VideoLoad extends BaseWorkspaceTool {
   // Loading a video for the model to watch only makes sense if it accepts video — required to be
   // declared on (ADR-0018). Withheld from the schema + refused per call.
   override canRun(): boolean {
-    return this.llm.resolve("text")?.input?.video === true;
+    return super.canRun() && this.llm.resolve("text")?.input?.video === true;
   }
 
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "VideoLoad",
@@ -37,9 +36,9 @@ export class VideoLoad extends BaseWorkspaceTool {
         },
       },
     };
-  }
 
-  async run(args: Record<string, unknown>, cwd: string): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+    const cwd = this.cwd() ?? "";
     const p = String(args.path ?? "");
     if (!p) return { ok: false, output: `VideoLoad rejected: missing required "path". Example: {"path":"/workspace/assets/clip.mp4"}` };
     try {

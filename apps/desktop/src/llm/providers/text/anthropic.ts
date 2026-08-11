@@ -133,7 +133,7 @@ export async function* streamAnthropic(
         const cur = toolAcc.get(evt.index);
         if (cur) {
           toolAcc.delete(evt.index);
-          yield { type: "tool_call", call: { id: cur.id, name: cur.name, arguments: cur.args, cwd: "" } };
+          yield { type: "tool_call", call: { id: cur.id, name: cur.name, arguments: cur.args } };
         }
         break;
       }

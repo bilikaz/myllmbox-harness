@@ -7,8 +7,7 @@ import { errorMessage } from "../../../lib/errors.ts";
 const MAX_LINES = 300;
 
 export class Read extends BaseWorkspaceTool {
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "Read",
@@ -27,9 +26,9 @@ export class Read extends BaseWorkspaceTool {
         },
       },
     };
-  }
 
-  async run(args: Record<string, unknown>, cwd: string): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+    const cwd = this.cwd() ?? "";
     const p = String(args.path ?? "");
     if (!p) return { ok: false, output: `Read rejected: missing required "path". Example: {"path":"/workspace/src/foo.ts"}` };
     const offset = typeof args.offset === "number" && args.offset >= 1 ? Math.floor(args.offset) : 1;

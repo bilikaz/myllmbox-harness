@@ -22,8 +22,7 @@ export class GalleryCompose extends BaseTool {
     return true;
   }
 
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "GalleryCompose",
@@ -62,9 +61,9 @@ export class GalleryCompose extends BaseTool {
         },
       },
     };
-  }
 
-  async run(args: Record<string, unknown>, cwd?: string, _signal?: AbortSignal, ctx?: ToolRunCtx): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, _signal?: AbortSignal, ctx?: ToolRunCtx): Promise<ToolResult> {
+    const cwd = this.cwd();
     const layout = findLayout(String(args.templateId ?? ""));
     if (!layout) {
       const handles = LAYOUTS.map((l) => l.handle).join(", ");

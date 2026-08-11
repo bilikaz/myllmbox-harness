@@ -136,12 +136,13 @@ export function SessionView() {
     setRenaming(false);
   }
 
-  const target = containerTarget(getContainer(session.containerId)?.type);
+  const containerType = getContainer(session.containerId)?.type;
+  const target = containerTarget(containerType);
   const isGen = target !== "text";
 
+  // One entry point — the engine routes by container.type (media → generate, chat/local → send).
   function submit(text: string, atts: Attachments) {
-    if (isGen) void ctx.sessions.generate(text, atts);
-    else void ctx.sessions.send(text, atts);
+    void ctx.sessions.dispatch(text, atts);
   }
 
   return (
@@ -205,7 +206,10 @@ export function SessionView() {
 
       <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto px-6 py-8">
         <div className="mx-auto max-w-3xl space-y-6">
-          <SystemBanner name={agentName ?? undefined} system={lastSystem ?? composed ?? baseSystemFor(session)} />
+          {/* System prompt only exists for conversation sessions — media sessions run a tool, not the LLM. */}
+          {(containerType === "chat" || containerType === "local") && (
+            <SystemBanner name={agentName ?? undefined} system={lastSystem ?? composed ?? baseSystemFor(session)} />
+          )}
           {session.loaded === false && (
             <p className="flex items-center justify-center gap-1.5 py-8 text-xs text-neutral-400">
               <RefreshCw size={12} className="animate-spin" /> {t("session.loading")}

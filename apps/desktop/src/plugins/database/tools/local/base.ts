@@ -1,5 +1,6 @@
 // Shared base for the Database plugin's main-side tools. They need Node (the DB drivers) but NOT a
-// workspace folder, so they sit in the local/ tier (globbed into electron main) with needsWorkspace()=false.
+// workspace folder, so they sit in the local/ tier (globbed into electron main) yet run in any conversation
+// container — they extend BaseTool (not BaseWorkspaceTool), so their `canRun` isn't container-scoped.
 // Enabled-gating is handled by the registry (ownerPluginId → config.plugins.database.enabled); these tools
 // only read their connection config and call the service.
 
@@ -8,10 +9,6 @@ import { isConnected } from "../../service.ts";
 import { DATABASE_SLUG, type DbConnection, type DbSettings } from "../../types.ts";
 
 export abstract class BaseDatabaseTool extends BaseTool {
-  override needsWorkspace(): boolean {
-    return false;
-  }
-
   protected connections(): DbConnection[] {
     return (this.config().plugins[DATABASE_SLUG]?.settings as DbSettings | undefined)?.connections ?? [];
   }

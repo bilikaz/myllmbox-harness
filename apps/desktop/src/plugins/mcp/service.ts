@@ -151,7 +151,7 @@ async function connect(server: McpServer, override?: McpSecretOverride): Promise
         function: { name: mcpToolName(server.name, t.name), description: t.description ?? "", parameters: t.inputSchema ?? { type: "object" } },
       };
       const desc: McpToolDescriptor = { server: server.name, tool: t.name, schema, call: (args, signal) => callTool(client, t.name, args, signal) };
-      registrar.register(new McpTool(registrar.config, desc), MCP_SLUG);
+      registrar.register(desc.schema.function.name, (config, container) => new McpTool(config, container, desc), MCP_SLUG);
       names.push(t.name);
     }
   } catch (e) {

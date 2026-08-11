@@ -20,5 +20,5 @@ register(
     order: 100, // plugin sections sort after the core ones
     render: () => <DatabaseSettingsBlock />,
   },
-  { region: "right-panel", pluginId: DATABASE_SLUG, id: "database-connections", order: 10, render: () => <DatabaseConnectionsPanel /> },
+  { region: "right-panel", pluginId: DATABASE_SLUG, id: "database-connections", order: 10, containers: ["chat", "local"], render: () => <DatabaseConnectionsPanel /> },
 );

@@ -6,37 +6,48 @@ Part of the architecture map — start at [../ARCHITECTURE.md](../ARCHITECTURE.m
 
 ## `core/tools/` — host-agnostic building blocks
 
-- A tool is a **class** extending `BaseTool`, constructed **once** with a single dependency: a getter
-  onto the live config (`() => Config`, `{ app, llm, plugins }`) — the one thing every tool can read
-  ([ADR-0048](../adr/0048-tool-ctx-config-carrier.md)). `this.config()` reads it; `this.llm` is **derived
-  from `config.llm`** on use (`createClient` is a stateless wrapper, so a tool that never calls a model
-  never builds one). `schema` is a getter, `run(args, cwd?, signal?)` takes the cwd + signal per call. A
-  tool module may also export plain **helpers** alongside the class — see registry. Four cheap per-tool checks: `canRun()` (capability),
-  `isPermissioned()` (is it gated? `BaseWorkspaceTool` → `true`), `needsWorkspace()`
-  (requires a workspace folder; `BaseWorkspaceTool` → `true`), and `defaultPermission()`
-  (default policy mode; the destructive/code tools `Delete` + `RunScript` → ask, rest → allow). `OUTPUT_CAP` / `cap()` live in
-  `tools/base.ts`; the vocabulary in `tools/types.ts`.
-- **`registry.ts`** (`ToolRegistry`) is the registry engine: a folder of eager-globbed
-  modules → pre-instantiated tools by name → resolve (find → `canRun` → parse → run). It
-  knows nothing of who calls it. Discovery instantiates **only concrete `BaseTool` subclasses**
-  (`v.prototype instanceof BaseTool`), so a tool module's sibling helper exports are ignored, not
-  `new`-ed (abstract bases are skipped by the `base.ts` path too). Non-tool code lives in `tools/helpers/`.
+- A tool is a **class** extending `BaseTool`, built **fresh per call** with two dependencies: a getter onto
+  the live config (`() => Config`, `{ app, llm, plugins }`) and the call's **`container`** — a direct value,
+  the container this instance was resolved for ([ADR-0048](../adr/0048-tool-ctx-config-carrier.md),
+  [ADR-0084](../adr/0084-tool-resolution-and-runner-split.md)). `this.config()` reads config; `this.llm` is
+  **derived from `config.llm`** on use (`createClient` is a stateless wrapper, so a tool that never calls a
+  model never builds one); `this.cwd()` reads `container.config.root`. **`schema` is a `static`**
+  (`ToolCtor.schema`) so the registry can read a tool's name without constructing it — the instance `get
+  schema()` on `BaseTool` delegates to the static; a per-instance-schema tool (MCP) overrides the getter.
+  The model-facing entrypoint is **`run(call: ToolCallRequest, signal?)`** on `BaseTool` (parses the JSON
+  args, builds the per-call ctx, wraps failures); each tool implements the work in **`execute(args, signal?,
+  ctx?)`**. A tool module may also export plain **helpers** alongside the class — see registry. Per-tool
+  checks: `canRun()` (capability + `BaseWorkspaceTool` gates on `container.type === "local"`),
+  `isPermissioned()` (gated? `BaseWorkspaceTool` → `true`), `single()` (one call/step), and two permission
+  fields — `defaultPermission` (the tool default; `Delete` + `RunScript` → ask, rest → allow; MCP computes
+  its dynamic default in the constructor) and `currentPermission` (set by `calculatePermission(agentCeiling)`
+  at filter time). `OUTPUT_CAP` / `cap()` live in `tools/base.ts`; the vocabulary in `tools/types.ts`.
+- **`registry.ts`** (`ToolRegistry`) **registers and resolves; it does not execute**
+  ([ADR-0084](../adr/0084-tool-resolution-and-runner-split.md)). It holds a folder of eager-globbed modules
+  as **factories** by name (`byName: Map<string, ToolFactory>` — the one `new` lives in the factory), keyed
+  by each class's `static schema.function.name` (read without constructing). `filter(params)` builds every
+  factory against `params.container`, gates it (disabled-plugin → `canRun` → `calculatePermission` →
+  drop mode-0), and returns the surviving **`BaseTool` instances** by name; `resolve(name, container)` builds
+  one tool for the runner. Discovery instantiates **only concrete `BaseTool` subclasses** (`v.prototype
+  instanceof BaseTool`), so a tool module's sibling helper exports are ignored (abstract bases are skipped by
+  the `base.ts` path too). Non-tool code lives in `tools/helpers/`.
 - **Runtime registration** ([ADR-0062](../adr/0062-runtime-registered-tools.md)): the registry also accepts
-  entries added after construction — `register(tool, ownerPluginId?)` / `unregister(name)`. A runtime entry
-  is an ordinary `BaseTool` instance (`byName` stays `Map<string, BaseTool>`), so `filter`/`run`/`cancel`
-  treat it identically to a globbed one; it's owner-tagged programmatically so the disabled-plugin gate still
-  applies. This is the **first dynamic (runtime-discovered) tool source** — a plugin's main-side service
-  contributes them through an injected `PluginToolRegistrar` (never importing the platform; see
-  [plugins.md](plugins.md)), the worked case being the MCP plugin discovering a server's tools at connect
-  ([mcp.md](mcp.md)). So "the folder layout IS the registry" now has a runtime-entries exception.
+  factories added after construction — `register(name, make, ownerPluginId?)` / `unregister(name)`. The name
+  is supplied by the caller (the registry no longer builds a tool to read it); `make` is the same
+  `(config, container) => BaseTool` factory shape as a globbed one, so `filter`/`resolve` treat a runtime
+  entry identically. It's owner-tagged so the disabled-plugin gate still applies. This is the **first dynamic
+  (runtime-discovered) tool source** — a plugin's main-side service contributes them through an injected
+  `PluginToolRegistrar` (never importing the platform; see [plugins.md](plugins.md)), the worked case being
+  the MCP plugin discovering a server's tools at connect ([mcp.md](mcp.md)).
 - **The folder is the permission tier** (and the process it's globbed into):
   - **`general/`** — no workspace, available in any session (chat included). Host-agnostic (HTTP +
     data-URLs), globbed into both the web renderer and electron main. Mostly permissionless
     (`ImageGenerate`, `ImageCompose`, `VideoGenerate` — `canRun()` only), but a general tool MAY still opt into the policy
     via `isPermissioned()`: `Fetch` (arbitrary HTTP — method/headers/body to any URL, for talking to APIs
     without a browser) is permissioned, **default ask** — it can authenticate and act anywhere, so the
-    human approves each call. `needsWorkspace()=false`, so it stays available in chat (not masked off like
-    fs tools). On electron it runs in main (no CORS); on the web host it's subject to the browser's CORS.
+    human approves each call. It's not a workspace tool (`canRun()` isn't container-gated), so it stays
+    available in chat (not masked off like fs tools). On electron it runs in main (no CORS); on the web host
+    it's subject to the browser's CORS.
   - **`local/`** — gated by the per-workspace policy (`0|1|2`): `Read` (paged via `offset`), `List`,
     `Find`, `Grep`, `Write`, `Edit`, `CreateFolder`, `Move`, `Copy`, `Delete`, `RunScript`, `ImageLoad`,
     `VideoLoad`, `ImageDescribe`, `VideoDescribe`. Need Node, so globbed only into electron main and
@@ -47,7 +58,8 @@ Part of the architecture map — start at [../ARCHITECTURE.md](../ARCHITECTURE.m
     never eval'd into the harness), and is **developer-gated** — `canRun()` reads `config.app.developerMode`,
     so it isn't advertised, listed, or runnable unless the user turns developer mode on
     ([ADR-0057](../adr/0057-developer-gated-script-execution.md)). A tool here needs Node but not necessarily a
-    workspace folder — it can override `needsWorkspace() = false` (e.g. a plugin's MySQL tool).
+    workspace folder — such a tool extends `BaseTool` (not `BaseWorkspaceTool`), so its `canRun()` isn't
+    container-gated (e.g. a plugin's MySQL tool).
   - **`account/`** — the memory tools (`SaveMemory`, `SearchMemory`, `GetMemory`,
     `EditMemory`, `DeleteMemory`): permissionless, but `canRun()` gates them on a
     **connected account** (`BaseAccountTool` → `isConnected()`). They call the
@@ -58,20 +70,23 @@ Part of the architecture map — start at [../ARCHITECTURE.md](../ARCHITECTURE.m
 - **Plugin tools reuse these tiers.** A plugin's `tools/<tier>/` folders are globbed into the same
   registries by the same paths ([plugins.md](plugins.md)); the registry tags each with its
   `ownerPluginId` (from the `plugins/<slug>/` glob path) and **drops a disabled plugin's tools** in
-  `filter()`/`run()` — the same gate shape as `canRun()`, keyed on `config.plugins.<slug>.enabled`.
+  `filter()` — the same gate shape as `canRun()`, keyed on `config.plugins.<slug>.enabled`.
 - **The gated-tool list is dynamic**: it's the tools that report `isPermissioned()`. The
   renderer reads it through `renderer/gatedTools.ts` (`useGatedTools()`), which calls
-  `ctx.tools.filter({ includeDisabled: true })` and keeps the permissioned `ToolFilterEntry`s
-  (`schema`, `permissioned`, `needsWorkspace`, `defaultMode`, `effectiveMode` — see
-  `tools/types.ts`). `effectiveMode` is computed inside `filter()` (in `registry.ts`):
-  workspace/agent policies are partial maps (stricter of grant and ceiling wins), a missing
-  entry falls back to the tool's `defaultPermission()`, and a `needsWorkspace` tool is forced
-  to mode 0 when no workspace is in context. The agent ceiling consults a reserved `*` wildcard
-  before the default, so an agent **grounds** itself with `{ "*": 0, … }` — only the listed tools
-  survive ([ADR-0070](../adr/0070-agent-tool-grounding-wildcard.md)). The ceiling binds **every**
-  tool tier ([ADR-0083](../adr/0083-total-agent-grounding.md)): `effectiveMode` STARTS from it —
-  permissionless (general-tier) tools included — and the engine tier filters through the same
-  ceiling before joining the advertised set. Workspace grants only tighten permissioned tools.
+  `ctx.tools.filter({ includeDisabled: true, container })` (a synthetic Local container so the
+  catalog lists fs tools too) and keeps the permissioned `ToolFilterEntry`s (`schema`,
+  `permissioned`, `single`, `defaultPermission`, `currentPermission` — the serializable projection
+  of a resolved tool, see `tools/types.ts`). **`currentPermission` is computed on the tool itself**
+  by `BaseTool.calculatePermission(agentCeiling)` (called from `filter()`): the workspace grant is
+  read off `container.permissions[name]` (narrowed 0/1/2, else `defaultPermission`), clamped by the
+  agent ceiling — stricter of grant and ceiling wins; a permissionless tool takes the ceiling
+  directly. There is no separate "no-workspace forces mode 0" branch — a workspace tool simply fails
+  `canRun()` (container type ≠ `local`) and never surfaces. The agent ceiling consults a reserved
+  `*` wildcard before the default, so an agent **grounds** itself with `{ "*": 0, … }` — only the
+  listed tools survive ([ADR-0070](../adr/0070-agent-tool-grounding-wildcard.md)). The ceiling binds
+  **every** tool tier ([ADR-0083](../adr/0083-total-agent-grounding.md)): `currentPermission` STARTS
+  from it — permissionless (general-tier) tools included — and the engine tier filters through the
+  same ceiling before joining the advertised set. Workspace grants only tighten permissioned tools.
 
 ## The engine tier — driver-level tools ([ADR-0050](../adr/0050-engine-tool-tier.md))
 
@@ -107,13 +122,15 @@ its gateway at boot (ADR-0034):
   built inline in `web/init.ts` (no separate tools file), and the Node-only gated tools
   don't exist in the web bundle.
 - **electron** — workspace/fs tools run in MAIN (they need `node:fs`, unreachable under
-  contextIsolation). The renderer's `ctx.tools` (`electron/init.ts`) forwards
-  `filter`/`run`/`cancel` to `api.tools.*` over the bridge; the wire is `WireConfig { config }`
-  (just the config snapshot — `cwd` rides on the `ToolCallRequest`). The main-side
-  `ToolRegistry` over `general/` + `workspace/`, plus a config-seeded LLM client
-  (`createClient(resolver)`), lives in `electron/tools.ts`, which re-seeds its module-level
-  `config` from the wire on each call; `electron/ipc.ts` wires the handlers. Cancel is a
-  separate `tools:cancel` IPC ([ADR-0014](../adr/0014-stop-semantics-and-tool-cancellation.md)).
+  contextIsolation). The renderer's `ctx.tools` (`electron/init.ts`) forwards `filter`/`run`/`cancel`
+  to `api.tools.*` over the bridge; the wire is `WireConfig { config, container? }` — the config
+  snapshot **and the call's container** (plain data — main resolves the tool against it, since a
+  resolved instance can't cross the bridge). `electron/tools.ts` holds the main-side `ToolRegistry`
+  (over `general/` + `local/`) and a `ToolRunner`: `toolFilter` runs `filter` and **`projectTools`**
+  the instances into the serializable wire entries; `execTool` hands the call + `wire.container` to
+  the runner, which resolves and dispatches. It re-seeds its module-level `config` from the wire on
+  each call; `electron/ipc.ts` wires the handlers. Cancel is a separate `tools:cancel` IPC
+  ([ADR-0014](../adr/0014-stop-semantics-and-tool-cancellation.md)).
 - **`account/` is the exception that stays in the renderer on BOTH platforms.** Electron
   builds a second in-process `ToolRegistry` over `account/*` and MERGES it with the bridge:
   `filter` spreads `{ ...(await mainFilter), ...accountReg.filter }`, and `run` routes by
@@ -121,10 +138,11 @@ its gateway at boot (ADR-0034):
   `authedFetch` — the account token + refresh — in the renderer, so it never crosses IPC
   ([ADR-0039](../adr/0039-account-local-store-and-connection-lifecycle.md)).
 
-So a tool call flows: driver → `ctx.tools.run(...)` → in-process (web, or electron's
-`account/` tier) or over the bridge → main (electron `general/`+`workspace/`). The driver
-only knows the gateway. Cancellation travels by call id (`cancel(callId)`) — the registry
-owns the `AbortController`, since a live `AbortSignal` can't cross the bridge.
+So a tool call flows: driver → `ctx.tools.run(call, container)` → in-process (web) or over the
+bridge → main (electron `general/`+`local/`), where the **`ToolRunner`** resolves the tool for the
+container and dispatches. The driver only knows the gateway. Cancellation travels by call id
+(`cancel(callId)`) — the **runner** owns the `AbortController` (the registry no longer executes), since
+a live `AbortSignal` can't cross the bridge.
 
 ## Image generation & composition ([ADR-0076](../adr/0076-image-edit-service-and-referenceable-images.md), [ADR-0077](../adr/0077-media-reference-aliases.md))
 
@@ -139,7 +157,7 @@ owns the `AbortController`, since a live `AbortSignal` can't cross the bridge.
   the name is collision-checked BEFORE spending a generation; a clash refuses with rename-or-overwrite
   guidance. The fs helper is loaded via dynamic import so these general (web-bundled) tools never pull
   `node:fs` into the web graph (`node:` builtins are rollup-external in the renderer builds).
-- **Per-call context** (`ToolRunCtx`, threaded by `registry.run` from non-model `ToolCallRequest`
+- **Per-call context** (`ToolRunCtx`, built by `BaseTool.run` from non-model `ToolCallRequest`
   fields the engine fills at dispatch): `imageOutputDir` (container config) and `mediaRefs` (the
   alias→content map for aliases mentioned in the call's args — tools run across the bridge as pure
   data and can't reach the transcript, so the engine resolves; [sessions.md](sessions.md)).

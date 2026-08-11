@@ -5,8 +5,7 @@ import { BaseWorkspaceTool } from "./base.ts";
 import { errorMessage } from "../../../lib/errors.ts";
 
 export class Edit extends BaseWorkspaceTool {
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "Edit",
@@ -26,9 +25,9 @@ export class Edit extends BaseWorkspaceTool {
         },
       },
     };
-  }
 
-  async run(args: Record<string, unknown>, cwd: string): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+    const cwd = this.cwd() ?? "";
     const p = String(args.path ?? "");
     const oldStr = String(args.old_string ?? "");
     const newStr = String(args.new_string ?? "");

@@ -8,8 +8,7 @@ import { errorMessage } from "../../../lib/errors.ts";
 // Move/rename a file or folder within the workspace (fs.rename — pure Node, portable). Parent dirs of the
 // destination are created. Both ends are confined to /workspace.
 export class Move extends BaseWorkspaceTool {
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "Move",
@@ -27,9 +26,9 @@ export class Move extends BaseWorkspaceTool {
         },
       },
     };
-  }
 
-  async run(args: Record<string, unknown>, cwd: string): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+    const cwd = this.cwd() ?? "";
     const from = String(args.from ?? "");
     const to = String(args.to ?? "");
     if (!from || !to) return { ok: false, output: `Move rejected: both "from" and "to" are required.` };

@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
 
 import { useCtx } from "../../../renderer/ctx.tsx";
 import { useDetection } from "../../../lib/hooks.ts";
+import { ephemeralContainer } from "../../../core/containers.ts";
 import { usePluginsConfig, setPluginSettings } from "../../../core/plugins/config.ts";
 import { Row, DetectButton, Switch, fieldInputFull } from "../../../pages/settings/Field.tsx";
 import { DATABASE_SLUG, ENGINE_DEFAULT_PORT, type DbConnection, type DbEngine, type DbSettings } from "../types.ts";
@@ -24,7 +25,7 @@ function ConnectionCard({ conn, open, onToggle, onPatch, onRemove }: {
   const ctx = useCtx();
   const { detecting, msg, detect } = useDetection(
     async () => {
-      const r = await ctx.tools.run({ id: "database-test", name: "DatabaseTestConnection", arguments: JSON.stringify({ connection: conn.name }), cwd: "" });
+      const r = await ctx.tools.run({ id: "database-test", name: "DatabaseTestConnection", arguments: JSON.stringify({ connection: conn.name }) }, ephemeralContainer());
       return r?.ok ? { ok: true, count: 1 } : { ok: false, count: 0, error: r?.output ?? t("plugins.database.testUnavailable") };
     },
     (r) => (r.ok ? t("plugins.database.connected") : (r.error ?? "")),

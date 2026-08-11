@@ -12,13 +12,11 @@ import type { ToolSpec } from "../src/core/tools/types.ts";
 
 function permTool(name: string) {
   return class extends BaseTool {
-    get schema(): ToolSpec {
-      return { type: "function", function: { name, description: "", parameters: {} } };
-    }
+    static readonly schema: ToolSpec = { type: "function", function: { name, description: "", parameters: {} } };
     isPermissioned(): boolean {
       return true;
     }
-    async run() {
+    async execute() {
       return { ok: true, output: "" };
     }
   };
@@ -28,10 +26,8 @@ function permTool(name: string) {
 // NEVER from the agent ceiling.
 function freeTool(name: string) {
   return class extends BaseTool {
-    get schema(): ToolSpec {
-      return { type: "function", function: { name, description: "", parameters: {} } };
-    }
-    async run() {
+    static readonly schema: ToolSpec = { type: "function", function: { name, description: "", parameters: {} } };
+    async execute() {
       return { ok: true, output: "" };
     }
   };
@@ -44,8 +40,11 @@ const registry = new ToolRegistry(cfg, {
   "/core/tools/Grep.ts": { Grep: permTool("Grep") },
   "/core/tools/ImageGenerate.ts": { ImageGenerate: freeTool("ImageGenerate") },
 });
+// A non-workspace container with empty permissions — permissioned tools fall back to their default (2),
+// permissionless ones ride the agent ceiling; canRun is true for all (none are workspace-gated here).
+const container = { type: "chat", permissions: {}, config: {} } as unknown as import("../src/core/containers.ts").Container;
 const advertised = (agentPermissions?: Record<string, 0 | 1 | 2>): string[] =>
-  Object.keys(registry.filter({ hasWorkspace: true, agentPermissions })).sort();
+  Object.keys(registry.filter({ container, agentPermissions })).sort();
 
 describe("agent tool grounding", () => {
   it("`*: 0` plus an allowlist advertises ONLY the listed tools", () => {

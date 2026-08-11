@@ -98,6 +98,7 @@ loading. Its index row below stays.
 | [0081](0081-gallery-core-capability.md) | Gallery is core — self-described layout catalog as data, one A4 page format, render port, GalleryOptions/GalleryCompose | accepted |
 | [0082](0082-generation-jobs-and-budgeted-tools.md) | Generation jobs + budgeted generate tools — files-as-ledger attempts, silent budgets, scratch/curated split (graphs promote), the structured reference law, task=data | accepted |
 | [0083](0083-total-agent-grounding.md) | The agent tools ceiling binds EVERY tier — permissionless and engine tools included; plugin agents catalog-listed opt-in | accepted |
+| [0084](0084-tool-resolution-and-runner-split.md) | Registry resolves (factories → per-container instances), a `ToolRunner` executes, the container is a per-call value; `run`/`execute` split, `static schema`, permission not "mode" | proposed |
 
 ## Needs review / important missing parts
 

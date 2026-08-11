@@ -2,6 +2,7 @@
 // (ToolSpec, ToolCallRequest, Image, Video) are owned by the llm layer and re-exported here.
 
 import type { Config } from "../config/index.ts";
+import type { Container } from "../containers.ts";
 import type { Image, Video, ToolSpec, ToolCallRequest, LLMConfig } from "../../llm/types.ts";
 export type { Image, Video, ToolSpec, ToolCallRequest } from "../../llm/types.ts";
 
@@ -24,9 +25,12 @@ export interface ToolRunCtx {
 }
 
 // What crosses the bridge to the main runner alongside the call: the config snapshot (functions/clients can't
-// cross IPC, so main seeds its Ctx from this). The cwd rides on the ToolCallRequest itself.
+// cross IPC, so main seeds its Ctx from this) and the call's container (plain data — main resolves the tool
+// against it, since a resolved instance can't cross the bridge). Both are per-call, seeded before the
+// registry runs.
 export interface WireConfig {
   config: Config;
+  container?: Container;
 }
 
 // A tool's model-facing name. Tools are discovered dynamically (no static list); whether a tool is
@@ -39,27 +43,25 @@ export interface ToolFilterParams {
   /** Exclude tools whose canRun() returns false. */
   checkCanRun?: boolean;
   /** Workspace-level policy: tool name → mode. Tools with mode 0 are excluded. */
-  workspacePermissions?: Record<string, ToolPermission>;
+  container: Container;
   /** Agent-level ceiling: tool name → mode. Applied on top of workspacePermissions (stricter wins). */
   agentPermissions?: Record<string, ToolPermission>;
-  /** Whether a workspace is in context. When false, needsWorkspace tools are forced to mode 0. */
-  hasWorkspace?: boolean;
   /** Keep mode-0 entries in the result instead of dropping them — the permissions UI shows them as "off". */
   includeDisabled?: boolean;
 }
 
-// One entry in the filter result — schema + permission metadata.
+// One entry in the filter result — the serializable projection of a resolved tool (a BaseTool instance can't
+// cross the bridge). schema + permission metadata; the mode fields are named for `permission`, not "mode".
 export interface ToolFilterEntry {
   name: string;
   schema: ToolSpec;
   permissioned: boolean;
-  /** Requires a workspace folder to run; forced off when filtered with hasWorkspace: false. */
-  needsWorkspace: boolean;
   /** At most one call per step: the dispatcher drops all but the first call to this tool in a turn. */
   single: boolean;
-  defaultMode: ToolPermission;
-  /** Computed effective mode after applying workspace + agent policy (0=off, 1=ask, 2=auto). */
-  effectiveMode: ToolPermission;
+  /** The tool's default permission (mode when the workspace hasn't set one; 0=off, 1=ask, 2=auto). */
+  defaultPermission: ToolPermission;
+  /** The resolved permission after applying workspace + agent policy (0=off, 1=ask, 2=auto). */
+  currentPermission: ToolPermission;
 }
 
 // Filter result: tool name → entry. Consumers iterate or look up by name.
@@ -68,8 +70,10 @@ export type ToolFilterResult = Record<string, ToolFilterEntry>;
 // The platform's tool execution, carried on ctx (ctx.tools). The web platform runs tools in-process; the
 // electron platform runs them in main over the bridge. core/the driver only touch this — never the platform.
 export interface ToolGateway {
-  filter(params?: ToolFilterParams): ToolFilterResult | Promise<ToolFilterResult>;
-  run(call: ToolCallRequest): Promise<ToolResult | null>;
-  // A live AbortSignal can't cross the bridge — cancellation travels by call id (registry owns the controller).
+  filter(params: ToolFilterParams): ToolFilterResult | Promise<ToolFilterResult>;
+  // The container is passed explicitly (not folded into the call, which is llm-layer data): main resolves the
+  // tool against it before dispatching. Returns null for an unknown tool.
+  run(call: ToolCallRequest, container: Container): Promise<ToolResult | null>;
+  // A live AbortSignal can't cross the bridge — cancellation travels by call id (the runner owns the controller).
   cancel(callId: string): void;
 }

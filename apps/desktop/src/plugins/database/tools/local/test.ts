@@ -6,8 +6,7 @@ import { ping } from "../../service.ts";
 // Open (or reuse) a connection and probe it. Permissionless — it changes nothing. The agent can call it to
 // check a connection is alive; the settings "Test connection" button also invokes it via ctx.tools.run.
 export class DatabaseTestConnection extends BaseDatabaseTool {
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "DatabaseTestConnection",
@@ -20,9 +19,8 @@ export class DatabaseTestConnection extends BaseDatabaseTool {
         },
       },
     };
-  }
 
-  async run(args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>): Promise<ToolResult> {
     const name = String(args.connection ?? "");
     const { conn, error } = this.pick(name);
     if (error) return { ok: false, output: error };

@@ -19,7 +19,7 @@ export type ContainerType = "chat" | "local" | "image" | "video";
 // resolves). `image`/`video` are the only non-text targets task 3 ships; audio is the natural next one.
 export function containerTarget(type: ContainerType | undefined): ModelService {
   return type === "image" ? "image" : type === "video" ? "video" : "text";
-}
+} //wtf is this?????? issue to inspect 
 
 export interface Container {
   id: string;
@@ -31,11 +31,11 @@ export interface Container {
   updatedAt: number;
 }
 
-export interface ContainerInit {
-  type: ContainerType;
-  name: string;
-  permissions?: Record<string, unknown>;
-  config?: Record<string, unknown>;
+// A throwaway, non-persisted container for filtering when no real one is in context (system-prompt preview,
+// permission catalogs) or as a non-workspace baseline. Its `type` drives canRun gating (workspace tools need
+// "local"); `permissions` can be seeded so the permission projection stays accurate.
+export function ephemeralContainer(type: ContainerType = "chat", permissions: Record<string, unknown> = {}): Container {
+  return { id: "", type, name: "", permissions, config: {}, createdAt: 0, updatedAt: 0 };
 }
 
 const log = rootLog.child("containers");
@@ -72,6 +72,13 @@ export async function hydrateContainers(): Promise<void> {
     hydrated = true;
     reg.notify();
   }
+}
+
+interface ContainerInit {
+  type: ContainerType;
+  name: string;
+  permissions?: Record<string, unknown>;
+  config?: Record<string, unknown>;
 }
 
 export async function createContainer(init: ContainerInit): Promise<Container | null> {

@@ -6,6 +6,7 @@
 
 import { BaseTool } from "../../core/tools/base.ts";
 import type { Config } from "../../core/config/index.ts";
+import type { Container } from "../../core/containers.ts";
 import type { ToolResult, ToolSpec, ToolPermission } from "../../core/tools/types.ts";
 import { MCP_SLUG, type McpSettings } from "./types.ts";
 
@@ -19,12 +20,18 @@ export interface McpToolDescriptor {
 export class McpTool extends BaseTool {
   constructor(
     config: () => Config,
+    container: Container,
     private readonly d: McpToolDescriptor,
   ) {
-    super(config);
+    super(config, container);
+    // Default MODE from the server card (ask if unset). Computed HERE rather than as a static field because
+    // it depends on live config; tools are built fresh per call, so this reflects the current settings.
+    this.defaultPermission = (this.server()?.toolDefaults?.[this.d.tool] ?? 1) as ToolPermission;
   }
 
-  get schema(): ToolSpec {
+  // Per-instance schema (name = MCP_<server>_<tool>, from the descriptor) — overrides the static-delegating
+  // base getter, since one McpTool class backs many differently-named tools.
+  override get schema(): ToolSpec {
     return this.d.schema;
   }
 
@@ -36,21 +43,13 @@ export class McpTool extends BaseTool {
     return true; // external — always governed; the MODE (off/ask/allow) is the policy, not this
   }
 
-  override needsWorkspace(): boolean {
-    return false;
-  }
-
   // Available only while its server is enabled — toggling the server off hides the tool with no re-registration.
+  // Not container-scoped: available in any conversation container.
   override canRun(): boolean {
     return !!this.server()?.enabled;
   }
 
-  // Default MODE from the server card (ask if unset).
-  override defaultPermission(): ToolPermission {
-    return (this.server()?.toolDefaults?.[this.d.tool] ?? 1) as ToolPermission;
-  }
-
-  run(args: Record<string, unknown>, _cwd?: string, signal?: AbortSignal): Promise<ToolResult> {
+  override execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
     return this.d.call(args, signal);
   }
 }

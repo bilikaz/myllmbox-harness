@@ -44,8 +44,11 @@ export abstract class BaseWorkspaceTool extends BaseTool {
     return true;
   }
 
-  override needsWorkspace(): boolean {
-    return true;
+  // A workspace tool runs only in a Local container (its `config.root` is the cwd). Any other container type
+  // → false, replacing the old needsWorkspace + no-workspace gate. Subclasses that add a model check compose
+  // with `&& super.canRun()`.
+  override canRun(): boolean {
+    return this.container.type === "local";
   }
 
   protected getRoot(cwd: string): string {

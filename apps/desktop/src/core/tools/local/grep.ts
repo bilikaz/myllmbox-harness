@@ -8,8 +8,7 @@ import { errorMessage } from "../../../lib/errors.ts";
 // Grep — recursive content search in pure Node (no `grep` binary, so identical on Windows/Mac/Linux).
 // Read-only and argv-controlled (not a free-form shell), so it stays auto-run rather than going through a gate.
 export class Grep extends BaseWorkspaceTool {
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "Grep",
@@ -29,9 +28,9 @@ export class Grep extends BaseWorkspaceTool {
         },
       },
     };
-  }
 
-  async run(args: Record<string, unknown>, cwd: string, signal?: AbortSignal): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+    const cwd = this.cwd() ?? "";
     const pattern = String(args.pattern ?? "");
     if (!pattern) return { ok: false, output: `Grep rejected: missing required "pattern".` };
     let re: RegExp;

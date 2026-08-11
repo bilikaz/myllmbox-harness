@@ -18,11 +18,10 @@ export class ImageLoad extends BaseWorkspaceTool {
   // Putting an image in front of the model is pointless if it can't see images — gated on the chat
   // (`text` pool) model's declared image input (a plain boolean). Withheld + refused per call.
   override canRun(): boolean {
-    return this.llm.resolve("text")?.input?.image === true;
+    return super.canRun() && this.llm.resolve("text")?.input?.image === true;
   }
 
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "ImageLoad",
@@ -37,9 +36,9 @@ export class ImageLoad extends BaseWorkspaceTool {
         },
       },
     };
-  }
 
-  async run(args: Record<string, unknown>, cwd: string): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+    const cwd = this.cwd() ?? "";
     const p = String(args.path ?? "");
     if (!p) return { ok: false, output: `ImageLoad rejected: missing required "path". Example: {"path":"/workspace/assets/photo.png"}` };
     try {

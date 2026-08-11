@@ -4,6 +4,7 @@
 
 import { getConfig, type Config } from "../core/config/index.ts";
 import { ToolRegistry } from "../core/tools/registry.ts";
+import { ToolRunner, projectTools } from "../core/tools/runner.ts";
 import type { ToolCallRequest, ToolResult, ToolFilterParams, ToolFilterResult, WireConfig } from "../core/tools/types.ts";
 import type { PluginToolRegistrar } from "../core/plugins/types.ts";
 import { setPageRenderer } from "../core/gallery/render.ts";
@@ -18,31 +19,33 @@ const MODULES = {
   ...import.meta.glob<Record<string, unknown>>("../plugins/*/tools/local/*.ts", { eager: true }),
 };
 
-// Re-seeded from each call's wire before the registry touches it; the getter reads the current binding,
-// so tools (and the clients they derive) see live config.
+// Re-seeded from each call's wire before the registry touches it; the getter reads the current binding, so
+// tools (and the clients they derive) see live config. The container rides on the wire (execTool) / params
+// (toolFilter) and is passed to resolve(), so `this.container` in a tool is the active session's container.
 let config: Config = getConfig();
 const reg = new ToolRegistry(() => config, MODULES);
+const runner = new ToolRunner(reg);
 // Gallery pages render in main via an offscreen window — inject the platform muscle into the core port.
 setPageRenderer(renderPageOffscreen);
 
-export function toolFilter(wire: WireConfig, params?: ToolFilterParams): ToolFilterResult {
+export function toolFilter(wire: WireConfig, params: ToolFilterParams): ToolFilterResult {
   config = wire.config;
-  return reg.filter(params);
+  return projectTools(reg.filter(params));
 }
 
 export async function execTool(call: ToolCallRequest, wire: WireConfig): Promise<ToolResult> {
   config = wire.config;
-  return (await reg.run(call)) ?? { ok: false, output: `tool call rejected: unknown tool "${call.name}".` };
+  if (!wire.container) return { ok: false, output: `tool call rejected: no container for "${call.name}".` };
+  return (await runner.run(call, wire.container)) ?? { ok: false, output: `tool call rejected: unknown tool "${call.name}".` };
 }
 
 export function cancelTool(callId: string): void {
-  reg.cancel(callId);
+  runner.cancel(callId);
 }
 
 // Handed to plugin services (wirePluginTools) so they can register runtime-discovered tools into THIS
 // registry. config is the wire-seeded getter, so a registered tool sees live config like a globbed one.
 export const toolRegistrar: PluginToolRegistrar = {
-  register: (tool, owner) => reg.register(tool, owner),
+  register: (name, make, owner) => reg.register(name, make, owner),
   unregister: (name) => reg.unregister(name),
-  config: () => config,
 };

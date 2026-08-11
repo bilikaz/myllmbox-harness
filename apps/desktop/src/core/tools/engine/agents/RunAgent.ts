@@ -14,7 +14,7 @@ export class RunAgent extends BaseEngineTool {
   }
 
   override available(ec: EngineCtx): boolean {
-    return catalogAgents(!!ec.workspace).length > 0;
+    return catalogAgents(ec.workspace?.type).length > 0;
   }
 
   async run(call: ToolCallRequest, ec: EngineCtx): Promise<EngineToolResult> {
@@ -35,7 +35,7 @@ export class RunAgent extends BaseEngineTool {
   // Plan one run: resolve the agent, then spawn it as a fresh child SESSION only — fanOut dispatches
   // it through the contract loop.
   private plan(run: Record<string, unknown>, ec: EngineCtx): Planned {
-    const resolved = resolveAgent(String(run.agent ?? ""), !!ec.workspace);
+    const resolved = resolveAgent(String(run.agent ?? ""), ec.workspace?.type);
     if (typeof resolved === "string") return { error: resolved };
     const task = String(run.task ?? "").trim();
     if (!task) return { error: `"${resolved.name}": missing task — say what the agent should do, with all the context it needs.` };

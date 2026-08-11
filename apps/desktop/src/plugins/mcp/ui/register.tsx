@@ -19,5 +19,5 @@ register(
     order: 110, // plugin sections sort after the core ones
     render: () => <McpSettingsBlock />,
   },
-  { region: "right-panel", pluginId: MCP_SLUG, id: "mcp-servers", order: 20, render: () => <McpServersPanel /> },
+  { region: "right-panel", pluginId: MCP_SLUG, id: "mcp-servers", order: 20, containers: ["chat", "local"], render: () => <McpServersPanel /> },
 );

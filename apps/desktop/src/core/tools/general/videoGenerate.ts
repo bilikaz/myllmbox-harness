@@ -13,8 +13,7 @@ export class VideoGenerate extends BaseGeneralTool {
     return this.llm.resolve("video") != null;
   }
 
-  get schema(): ToolSpec {
-    return {
+  static readonly schema: ToolSpec = {
       type: "function",
       function: {
         name: "VideoGenerate",
@@ -45,9 +44,8 @@ export class VideoGenerate extends BaseGeneralTool {
         },
       },
     };
-  }
 
-  async run(args: Record<string, unknown>, _cwd?: string, signal?: AbortSignal, ctx?: ToolRunCtx): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, signal?: AbortSignal, ctx?: ToolRunCtx): Promise<ToolResult> {
     const prompt = String(args.prompt ?? "").trim();
     if (!prompt) return { ok: false, output: `VideoGenerate rejected: missing required "prompt".` };
     // A pinned pick (`ctx.target`) overrides the pool head — for the size math and the call alike.

@@ -21,6 +21,7 @@ import { isEngineTool, runEngineTool } from "../../tools/engine/dispatch.ts";
 import type { EngineCtx } from "../../tools/engine/base.ts";
 import { sessionBus as bus } from "../events.ts";
 import { getSession, removeToolCall, setLastSystem, stampMediaRefs, toChatMessages } from "../store.ts";
+import { ephemeralContainer } from "../../containers.ts";
 import { extractRefTokens, refLabel, resolveRefs } from "../mediaRefs.ts";
 import { errorMessage } from "../../../lib/errors.ts";
 import { downscaleImage } from "../../../lib/imageResize.ts";
@@ -189,7 +190,7 @@ export class LlmSessionLoop extends SessionLoopBase {
           out.push({ callId: call.id, output });
           return;
         }
-        const mode = seg.caps.filtered[call.name]?.effectiveMode ?? 0;
+        const mode = seg.caps.filtered[call.name]?.currentPermission ?? 0;
         if (mode === 0) {
           const why = !seg.caps.ws
             ? `tool "${call.name}" needs a workspace folder — open one for this session to use it.`
@@ -213,16 +214,18 @@ export class LlmSessionLoop extends SessionLoopBase {
         seg.controller.signal.addEventListener("abort", onAbort, { once: true });
         try {
           result =
-            (await this.app.tools.run({
-              id: call.id,
-              name: call.name,
-              arguments: call.arguments,
-              cwd: (seg.caps.ws?.config.root as string | undefined) ?? "",
-              imageOutputDir: seg.caps.ws?.config.imageOutputDir as string | undefined,
-              mediaRefs: resolveRefs(getSession(sid)?.messages ?? [], extractRefTokens(call.arguments)),
-              sessionId: sid,
-              meta: getSession(sid)?.meta as Record<string, unknown> | undefined,
-            })) ?? { ok: false, output: `tool "${call.name}" is unavailable here.` };
+            (await this.app.tools.run(
+              {
+                id: call.id,
+                name: call.name,
+                arguments: call.arguments,
+                imageOutputDir: seg.caps.ws?.config.imageOutputDir as string | undefined,
+                mediaRefs: resolveRefs(getSession(sid)?.messages ?? [], extractRefTokens(call.arguments)),
+                sessionId: sid,
+                meta: getSession(sid)?.meta as Record<string, unknown> | undefined,
+              },
+              seg.caps.container,
+            )) ?? { ok: false, output: `tool "${call.name}" is unavailable here.` };
         } catch (e) {
           result = { ok: false, output: `tool execution failed: ${errorMessage(e)}` };
         } finally {
@@ -325,7 +328,7 @@ export class LlmSessionLoop extends SessionLoopBase {
       opts: p.opts,
       leased: false,
       turnInput: {},
-      caps: { isChild: false, filtered: {}, toolSpecs: [], fsAccess: false, browserAccess: false },
+      caps: { container: ephemeralContainer(), isChild: false, filtered: {}, toolSpecs: [], fsAccess: false, wsToolNames: [], browserAccess: false },
       finalText: "",
       finalThinking: "",
       errored: false,

@@ -95,7 +95,7 @@ export async function* streamGemini(
       if (p.functionCall?.name) {
         yield {
           type: "tool_call",
-          call: { id: `call_${crypto.randomUUID()}`, name: p.functionCall.name, arguments: JSON.stringify(p.functionCall.args ?? {}), cwd: "" },
+          call: { id: `call_${crypto.randomUUID()}`, name: p.functionCall.name, arguments: JSON.stringify(p.functionCall.args ?? {}) },
         };
         continue;
       }

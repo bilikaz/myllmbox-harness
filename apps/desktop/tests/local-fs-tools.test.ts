@@ -19,6 +19,7 @@ import { RunScript } from "../src/core/tools/local/runScript.ts";
 
 initTestCtx();
 const cfg = () => getConfig();
+const wsC = () => ({ type: "local", config: { root: dir } }) as unknown as import("../src/core/containers.ts").Container;
 
 let dir: string;
 beforeAll(async () => {
@@ -34,20 +35,20 @@ afterAll(async () => {
 
 describe("Grep (pure Node)", () => {
   it("finds matches across files with /workspace-relative, line-numbered output", async () => {
-    const r = await new Grep(cfg).run({ pattern: "hello" }, dir);
+    const r = await new Grep(cfg, wsC()).execute({ pattern: "hello" });
     expect(r.ok).toBe(true);
     expect(r.output).toContain("/workspace/src/alpha.ts:2:hello world");
     expect(r.output).toContain("/workspace/src/beta.md:2:hello there");
   });
 
   it("reports no matches plainly", async () => {
-    const r = await new Grep(cfg).run({ pattern: "nonexistent-zzz" }, dir);
+    const r = await new Grep(cfg, wsC()).execute({ pattern: "nonexistent-zzz" });
     expect(r.ok).toBe(true);
     expect(r.output).toBe("(no matches)");
   });
 
   it("rejects an invalid regex instead of throwing", async () => {
-    const r = await new Grep(cfg).run({ pattern: "(" }, dir);
+    const r = await new Grep(cfg, wsC()).execute({ pattern: "(" });
     expect(r.ok).toBe(false);
     expect(r.output).toMatch(/invalid regular expression/);
   });
@@ -55,18 +56,18 @@ describe("Grep (pure Node)", () => {
 
 describe("Find (name glob)", () => {
   it("matches a suffix glob", async () => {
-    const r = await new Find(cfg).run({ pattern: "*.md" }, dir);
+    const r = await new Find(cfg, wsC()).execute({ pattern: "*.md" });
     expect(r.output).toBe("/workspace/src/beta.md");
   });
 
   it("matches a contains glob and an exact name", async () => {
-    expect((await new Find(cfg).run({ pattern: "*lph*" }, dir)).output).toBe("/workspace/src/alpha.ts");
-    expect((await new Find(cfg).run({ pattern: "notes.txt" }, dir)).output).toBe("/workspace/notes.txt");
+    expect((await new Find(cfg, wsC()).execute({ pattern: "*lph*" })).output).toBe("/workspace/src/alpha.ts");
+    expect((await new Find(cfg, wsC()).execute({ pattern: "notes.txt" })).output).toBe("/workspace/notes.txt");
   });
 
   it("treats the dot as a literal, not a wildcard", async () => {
     // 'notesXtxt' must NOT match "notes.txt"
-    const r = await new Find(cfg).run({ pattern: "notesXtxt" }, dir);
+    const r = await new Find(cfg, wsC()).execute({ pattern: "notesXtxt" });
     expect(r.output).toBe("(no matches)");
   });
 });
@@ -74,14 +75,14 @@ describe("Find (name glob)", () => {
 describe("Move / Copy / Delete", () => {
   it("Move renames within the workspace", async () => {
     await writeFile(path.join(dir, "draft.md"), "draft");
-    const r = await new Move(cfg).run({ from: "draft.md", to: "docs/final.md" }, dir);
+    const r = await new Move(cfg, wsC()).execute({ from: "draft.md", to: "docs/final.md" });
     expect(r.ok).toBe(true);
     expect(existsSync(path.join(dir, "draft.md"))).toBe(false);
     expect(existsSync(path.join(dir, "docs", "final.md"))).toBe(true);
   });
 
   it("Copy duplicates a file", async () => {
-    const r = await new Copy(cfg).run({ from: "notes.txt", to: "notes-copy.txt" }, dir);
+    const r = await new Copy(cfg, wsC()).execute({ from: "notes.txt", to: "notes-copy.txt" });
     expect(r.ok).toBe(true);
     expect(existsSync(path.join(dir, "notes-copy.txt"))).toBe(true);
     expect(existsSync(path.join(dir, "notes.txt"))).toBe(true);
@@ -89,16 +90,16 @@ describe("Move / Copy / Delete", () => {
 
   it("Delete removes a file but refuses the workspace root", async () => {
     await writeFile(path.join(dir, "trash.txt"), "x");
-    expect((await new Delete(cfg).run({ path: "trash.txt" }, dir)).ok).toBe(true);
+    expect((await new Delete(cfg, wsC()).execute({ path: "trash.txt" })).ok).toBe(true);
     expect(existsSync(path.join(dir, "trash.txt"))).toBe(false);
 
-    const root = await new Delete(cfg).run({ path: "/workspace" }, dir);
+    const root = await new Delete(cfg, wsC()).execute({ path: "/workspace" });
     expect(root.ok).toBe(false);
     expect(root.output).toMatch(/cannot delete the workspace root/);
   });
 
   it("Delete defaults to ask (mode 1)", () => {
-    expect(new Delete(cfg).defaultPermission()).toBe(1);
+    expect(new Delete(cfg, wsC()).defaultPermission).toBe(1);
   });
 });
 
@@ -107,11 +108,11 @@ describe("Read paging", () => {
     const lines = Array.from({ length: 350 }, (_, i) => `line ${i + 1}`).join("\n");
     await writeFile(path.join(dir, "long.txt"), lines);
 
-    const first = await new Read(cfg).run({ path: "long.txt" }, dir);
+    const first = await new Read(cfg, wsC()).execute({ path: "long.txt" });
     expect(first.output).toContain("lines 1-300 of 350");
     expect(first.output).toContain(`# Next: Read {"path": "long.txt", "offset": 301}`);
 
-    const next = await new Read(cfg).run({ path: "long.txt", offset: 301 }, dir);
+    const next = await new Read(cfg, wsC()).execute({ path: "long.txt", offset: 301 });
     expect(next.output).toContain("lines 301-350 of 350");
     expect(next.output).toContain("350: line 350");
   });
@@ -120,21 +121,21 @@ describe("Read paging", () => {
 describe("RunScript (developer-gated, out-of-process)", () => {
   it("is unavailable until developer mode is on", () => {
     setConfigOverrides({ developerMode: false });
-    expect(new RunScript(cfg).canRun()).toBe(false);
+    expect(new RunScript(cfg, wsC()).canRun()).toBe(false);
     setConfigOverrides({ developerMode: true });
-    expect(new RunScript(cfg).canRun()).toBe(true);
+    expect(new RunScript(cfg, wsC()).canRun()).toBe(true);
   });
 
   it("runs a script in a child Node process and returns its output + exit code", async () => {
     setConfigOverrides({ developerMode: true });
     await writeFile(path.join(dir, "hello.js"), `console.log("from script " + process.argv[2]);`);
-    const r = await new RunScript(cfg).run({ path: "hello.js", args: ["hi"] }, dir);
+    const r = await new RunScript(cfg, wsC()).execute({ path: "hello.js", args: ["hi"] });
     expect(r.ok).toBe(true);
     expect(r.output).toContain("from script hi");
     expect(r.output).toContain("[exit: 0]");
   });
 
   it("defaults to ask (mode 1)", () => {
-    expect(new RunScript(cfg).defaultPermission()).toBe(1);
+    expect(new RunScript(cfg, wsC()).defaultPermission).toBe(1);
   });
 });

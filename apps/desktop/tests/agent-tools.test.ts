@@ -26,7 +26,8 @@ function resetLibrary(): void {
 
 function addAgent(name: string, patch: { workspace?: boolean; description?: string } = {}): string {
   const id = createAgent(name);
-  saveAgent(id, { description: "does things", ...patch });
+  const { workspace, ...rest } = patch;
+  saveAgent(id, { description: "does things", ...rest, containers: workspace ? ["local"] : undefined });
   return id;
 }
 
@@ -36,35 +37,35 @@ describe("catalogAgents", () => {
   it("hides workspace agents from a chat context, shows them in a workspace (after the built-in General agent)", () => {
     addAgent("chat worker");
     addAgent("repo worker", { workspace: true });
-    expect(catalogAgents(false).map((a) => a.name)).toEqual(["General agent", "chat worker"]);
-    expect(catalogAgents(true).map((a) => a.name)).toEqual(["General agent", "chat worker", "repo worker"]);
+    expect(catalogAgents("chat").map((a) => a.name)).toEqual(["General agent", "chat worker"]);
+    expect(catalogAgents("local").map((a) => a.name)).toEqual(["General agent", "chat worker", "repo worker"]);
   });
 
   it("excludes unnamed agents — the name is the address", () => {
     addAgent("  "); // whitespace-only
     addAgent("named");
-    expect(catalogAgents(true).map((a) => a.name)).toEqual(["General agent", "named"]);
+    expect(catalogAgents("local").map((a) => a.name)).toEqual(["General agent", "named"]);
   });
 });
 
 describe("built-in General agent", () => {
   it("is always available and resolvable, in both chat and workspace", () => {
-    expect(catalogAgents(false).some((a) => a.id === GENERAL_AGENT_ID)).toBe(true);
-    expect(catalogAgents(true).some((a) => a.id === GENERAL_AGENT_ID)).toBe(true);
-    const hit = resolveAgent("General agent", false);
+    expect(catalogAgents("chat").some((a) => a.id === GENERAL_AGENT_ID)).toBe(true);
+    expect(catalogAgents("local").some((a) => a.id === GENERAL_AGENT_ID)).toBe(true);
+    const hit = resolveAgent("General agent", "chat");
     expect((hit as { id: string }).id).toBe(GENERAL_AGENT_ID);
   });
 
   it("inherits the caller's context — empty system, no tool ceiling", () => {
-    const g = catalogAgents(true).find((a) => a.id === GENERAL_AGENT_ID)!;
+    const g = catalogAgents("local").find((a) => a.id === GENERAL_AGENT_ID)!;
     expect(g.system).toBe("");
     expect(g.tools).toEqual({});
   });
 
   it("steps aside when the user defines their own General agent (theirs wins, no clash)", () => {
     addAgent("General agent");
-    expect(catalogAgents(true).filter((a) => a.id === GENERAL_AGENT_ID)).toHaveLength(0);
-    expect(catalogAgents(true).filter((a) => a.name === "General agent")).toHaveLength(1);
+    expect(catalogAgents("local").filter((a) => a.id === GENERAL_AGENT_ID)).toHaveLength(0);
+    expect(catalogAgents("local").filter((a) => a.name === "General agent")).toHaveLength(1);
   });
 });
 
@@ -79,7 +80,7 @@ describe("listAgentsOutput", () => {
   it("lists quoted names with descriptions — no markers glued to the name", () => {
     addAgent("summarizer", { description: "summarizes text" });
     addAgent("repo worker", { workspace: true });
-    const out = listAgentsOutput(true);
+    const out = listAgentsOutput("local");
     expect(out).toContain('- "summarizer" — summarizes text');
     expect(out).toContain('- "repo worker" — does things');
     expect(out).not.toContain("[workspace"); // the marker confused models into treating it as part of the name
@@ -89,7 +90,7 @@ describe("listAgentsOutput", () => {
 describe("resolveAgent", () => {
   it("matches case-insensitively with surrounding whitespace", () => {
     const id = addAgent("Summarizer");
-    const hit = resolveAgent("  summarizer ", false);
+    const hit = resolveAgent("  summarizer ", "chat");
     expect(typeof hit).not.toBe("string");
     expect((hit as { id: string }).id).toBe(id);
   });
@@ -97,7 +98,7 @@ describe("resolveAgent", () => {
   it("forgives catalog decoration echoed into the name — quotes and bracketed markers", () => {
     const id = addAgent("Code reviewer", { workspace: true });
     for (const sent of ['"Code reviewer"', "Code reviewer [workspace]", '"Code reviewer" [workspace agent]']) {
-      const hit = resolveAgent(sent, true);
+      const hit = resolveAgent(sent, "local");
       expect(typeof hit, `for input ${sent}`).not.toBe("string");
       expect((hit as { id: string }).id).toBe(id);
     }
@@ -105,7 +106,7 @@ describe("resolveAgent", () => {
 
   it("returns the valid names on a miss — a blind guess costs one step, like listing", () => {
     addAgent("summarizer");
-    const out = resolveAgent("sumarizer", false);
+    const out = resolveAgent("sumarizer", "chat");
     expect(out).toMatch(/no agent is named "sumarizer"/);
     expect(out).toContain('- "summarizer"');
   });
@@ -113,13 +114,13 @@ describe("resolveAgent", () => {
   it("refuses ambiguous names instead of picking one", () => {
     addAgent("twin");
     addAgent("twin");
-    expect(resolveAgent("twin", false)).toMatch(/ambiguous/);
+    expect(resolveAgent("twin", "chat")).toMatch(/ambiguous/);
   });
 
   it("never resolves a workspace agent for a chat context", () => {
     addAgent("repo worker", { workspace: true });
     addAgent("chat worker");
-    expect(resolveAgent("repo worker", false)).toMatch(/no agent is named/);
+    expect(resolveAgent("repo worker", "chat")).toMatch(/no agent is named/);
   });
 });
 

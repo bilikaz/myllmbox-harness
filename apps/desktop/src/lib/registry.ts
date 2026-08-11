@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
+import type { ContainerType } from "../core/containers.ts";
+
 // UI contribution registry.
 
 export type Region = "left-top" | "right-panel" | "settings" | "main";
@@ -8,6 +10,9 @@ export type Region = "left-top" | "right-panel" | "settings" | "main";
 export interface Contribution {
   region: Region;
   id: string;
+  // Self-gate: the container types this contribution shows for (task4). Unset = every type. `Slot` checks
+  // the active session's `container.type` against it — the contribution never renders for a type it omits.
+  containers?: ContainerType[];
   // Set on plugin-contributed surfaces — the owning plugin's slug. A contribution whose plugin is
   // disabled is dropped: <Slot> for the side regions, SettingsModal for the settings menu. An enabled
   // plugin's settings contribution shows as its own settings-menu section. Core contributions leave this unset.
