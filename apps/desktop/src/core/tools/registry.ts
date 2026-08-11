@@ -1,11 +1,11 @@
 // The tool registry: a folder of eager-globbed modules → pre-instantiated tools by name.
 // Each process supplies its own glob (a literal path, so its bundle only pulls that folder).
 
-import { BaseTool, type ToolCtor } from "./base.ts";
+import { BaseTool, type ToolCtor, type ToolFactory } from "./base.ts";
 import { type ToolCallRequest, type ToolResult, type ToolFilterParams, type ToolFilterResult, type ToolFilterEntry } from "./types.ts";
 import type { Config } from "../config/index.ts";
+import type { Container } from "../containers.ts";
 import { errorMessage } from "../../lib/errors.ts";
-import type { ToolPermission } from "./types.ts";
 
 // A tool globbed from src/plugins/<slug>/tools/... is OWNED by that plugin; core tools have no owner.
 // The owner is read off the glob path so the registry can drop a disabled plugin's tools.
@@ -14,10 +14,16 @@ function ownerFromPath(path: string): string | undefined {
 }
 
 export class ToolRegistry {
-  readonly byName = new Map<string, BaseTool>();
+  readonly byName = new Map<string, ToolFactory>();
   readonly running = new Map<string, AbortController>();
   // tool name → owning plugin slug (only for plugin-contributed tools).
   private readonly owners = new Map<string, string>();
+  // The active container for the in-flight filter()/run() — the registry OWNS it (assigned at resolution),
+  // and hands its live getter to every tool (globbed below + runtime factories). `!`: a tool only reads
+  // container() while serving a call (by which point it's assigned), never at build time.
+  private current!: Container;
+  // The one getter every tool gets — reads `current` lazily, so it resolves to the call's container.
+  readonly container = (): Container => this.current;
 
   constructor(
     private readonly config: () => Config,
@@ -30,10 +36,12 @@ export class ToolRegistry {
         // Only concrete BaseTool subclasses are tools — a tool module may also export plain helpers
         // (e.g. a formatter), which must NOT be instantiated as tools.
         if (typeof v !== "function" || !(v.prototype instanceof BaseTool)) continue;
-        const tool = new (v as ToolCtor)(config);
-        const name = tool.schema.function.name;
-        this.byName.set(name, tool);
-        if (owner) this.owners.set(name, owner);
+
+        const ctor = v as ToolCtor;
+        // A globbed class is registered as a factory — the one `new` lives inside `make`, so globbed and
+        // runtime (MCP) tools share the SAME build path (resolution elsewhere). The name is derived from the
+        // class STATIC schema (`ctor.schema.function.name`), never by constructing — no container here.
+        this.register(ctor.schema.function.name, (config, container) => new ctor(config, container), owner);
       }
     }
   }
@@ -45,59 +53,33 @@ export class ToolRegistry {
     return owner ? !!this.config().plugins[owner]?.enabled : true;
   }
 
-  filter(params?: ToolFilterParams): ToolFilterResult {
-    const out: ToolFilterResult = {};
-    for (const tool of this.byName.values()) {
+  filter(params: ToolFilterParams): Record<string, BaseTool> {
+    const tools: Record<string, BaseTool> = {};
+    for (const make of this.byName.values()) {
+      const tool = make(this.config, params.container);
       const name = tool.schema.function.name;
 
       // disabled-plugin gate: a disabled plugin's tools never advertise (not even as "off")
       if (!this.ownerEnabled(name)) continue;
 
       // canRun gate
-      if (params?.checkCanRun && !tool.canRun()) continue;
-
-      // permission metadata
-      const permissioned = tool.isPermissioned();
-      const needsWorkspace = tool.needsWorkspace();
-      const defaultMode = tool.defaultPermission();
-
-      // The AGENT ceiling binds EVERY tool — it is a statement about the agent, not the workspace policy
-      // (a permissionless general tool bypassing `{"*": 0}` grounding is how a grounded head escapes its
-      // toolset). Falls back to a `*` wildcard before the default — an agent sets `{ "*": 0, Read: 2 }`
-      // to GROUND itself to a fixed toolset (everything unlisted disabled), instead of inheriting the
-      // full set. No wildcard → unlisted tools default to 2 (inherit), the prior behaviour. The WORKSPACE
-      // grant applies only to permissioned tools (the policy surface); stricter of grant and ceiling wins.
-      const agentCeiling = (params?.agentPermissions?.[name] ?? params?.agentPermissions?.["*"] ?? 2) as ToolPermission;
-      let effectiveMode: ToolPermission = agentCeiling;
-      if (permissioned) {
-        const wsMode = params?.workspacePermissions?.[name] ?? defaultMode;
-        effectiveMode = Math.min(wsMode, agentCeiling) as ToolPermission;
-      }
-      // A tool that needs a workspace is off when none is in context.
-      if (needsWorkspace && params?.hasWorkspace === false) effectiveMode = 0;
-
+      if (params.checkCanRun && !tool.canRun()) continue;
+      const agentCeiling = params.agentPermissions?.[name] ?? params.agentPermissions?.["*"] ?? 2;
+      tool.calculatePermission(agentCeiling);
       // Drop disabled tools unless the caller wants them listed (the permissions UI shows them as "off").
-      if (effectiveMode === 0 && !params?.includeDisabled) continue;
+      if (tool.currentPermission === 0 && !params.includeDisabled) continue;
 
-      out[name] = {
-        name,
-        schema: tool.schema,
-        permissioned,
-        needsWorkspace,
-        single: tool.single(),
-        defaultMode,
-        effectiveMode,
-      } satisfies ToolFilterEntry;
+      tools[name] = tool;
     }
-    return out;
+    return tools;
   }
 
   // Runtime tool registration — the first dynamic tool source (MCP servers, discovered at connect).
-  // A registered tool is a regular BaseTool instance (byName stays Map<string, BaseTool>); static globbed
-  // tools never call these. Owner-tagged so the disabled-plugin gate drops them like any plugin tool.
-  register(tool: BaseTool, ownerPluginId?: string): void {
-    const name = tool.schema.function.name;
-    this.byName.set(name, tool);
+  // Stores the FACTORY, not a built tool — resolution (calling `make`) happens per-call elsewhere, so the
+  // container is bound at call time rather than captured here. Name is supplied by the caller (we no longer
+  // build the tool to read `schema.function.name`). Owner-tagged so the disabled-plugin gate drops them.
+  register(name: string, make: ToolFactory, ownerPluginId?: string): void {
+    this.byName.set(name, make);
     if (ownerPluginId) this.owners.set(name, ownerPluginId);
   }
 
@@ -105,6 +87,8 @@ export class ToolRegistry {
     this.byName.delete(name);
     this.owners.delete(name);
   }
+/*
+  those 2 exist in llm calls or other walker runner not here as registry is for registry not for runners. the running logic is for runners
 
   async run(call: ToolCallRequest): Promise<ToolResult | null> {
     const tool = this.byName.get(call.name);
@@ -129,7 +113,7 @@ export class ToolRegistry {
       };
     }
     try {
-      return await tool.run(args, call.cwd, controller.signal, { imageOutputDir: call.imageOutputDir, mediaRefs: call.mediaRefs, sessionId: call.sessionId, meta: call.meta, target: call.target });
+      return await tool.run(args, controller.signal, { imageOutputDir: call.imageOutputDir, mediaRefs: call.mediaRefs, sessionId: call.sessionId, meta: call.meta, target: call.target });
     } catch (e) {
       return { ok: false, output: `error running ${call.name}: ${errorMessage(e)}` };
     } finally {
@@ -137,8 +121,9 @@ export class ToolRegistry {
     }
   }
 
-  cancel(callId: string): void {
+cancel(callId: string): void {
     this.running.get(callId)?.abort();
   }
+*/
 
 }
