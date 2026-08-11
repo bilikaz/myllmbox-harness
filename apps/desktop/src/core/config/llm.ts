@@ -1,6 +1,8 @@
-// The LLM config — holds a resolved entry per service. Passive + transient:
-// Settings derives it and writes it in; the llm client reads it. Never persisted
-// (it's pure derived state), so it's a plain reactive module — not a storage consumer.
+// The LLM config — ONE derived, transient store: Settings resolves the per-service priority POOLS and writes
+// them here; the concurrency runner leases over the pools, and the llm client reads each service's head
+// (`config.llm[service]` = the pool's first slot). Never persisted (pure derived state from Settings), so it's
+// a plain reactive module — not a storage consumer. (Was split across llm.ts + pools.ts; the head IS the pool
+// head, so pools is the source and the head-list is derived from it — one store.)
 
 import { useSyncExternalStore } from "react";
 
@@ -32,28 +34,58 @@ export interface LLMConfig {
 
 export type LLMConfigList = Partial<Record<ModelService, LLMConfig>>;
 
-let state: LLMConfigList = {};
+// One model in a service's priority pool. `c` is its max concurrent in-flight calls; `reserve` is the slice
+// kept for foreground only (>0 only on the `text` pool — it sizes chat's headroom over background sub-agent
+// runs sharing the same model). The model key for binding/affinity is `${providerId}:${modelId}`.
+export interface RunnerSlot {
+  providerId: string;
+  modelId: string;
+  config: LLMConfig;
+  c: number;
+  reserve: number;
+}
+
+export type RunnerPools = Partial<Record<ModelService, RunnerSlot[]>>;
+
+export const modelKey = (s: { providerId: string; modelId: string }): string => `${s.providerId}:${s.modelId}`;
+
+// Source of truth: the ordered pools. `heads` is derived from it (head = pools[service][0].config) and kept in
+// sync on every write, so `config.llm[service]` stays a plain LLMConfig for the resolver.
+let pools: RunnerPools = {};
+let heads: LLMConfigList = {};
 const { subscribe, notify } = createListeners();
 
-export function getLLMConfigList(): LLMConfigList {
-  return state;
-}
-
-export function getLLMConfig(service: ModelService): LLMConfig | null {
-  return state[service] ?? null;
-}
-
-export function useLLMConfigList(): LLMConfigList {
-  return useSyncExternalStore(subscribe, () => state, () => state);
-}
-
-// Merge a slice; undefined/null value clears that service's slot.
-export function writeLLMConfig(patch: LLMConfigList): void {
-  const next = { ...state };
-  for (const [service, entry] of Object.entries(patch)) {
-    if (entry) next[service as ModelService] = entry;
-    else delete next[service as ModelService];
+function deriveHeads(): LLMConfigList {
+  const out: LLMConfigList = {};
+  for (const [svc, slots] of Object.entries(pools)) {
+    const head = slots?.[0]?.config;
+    if (head) out[svc as ModelService] = head;
   }
-  state = next;
+  return out;
+}
+
+// Settings writes the resolved pools here; the head-list is recomputed from them.
+export function writeRunnerPools(next: RunnerPools): void {
+  pools = next;
+  heads = deriveHeads();
   notify();
+}
+
+// ── pools (the concurrency runner) ────────────────────────────────────────────
+export function getRunnerPools(): RunnerPools {
+  return pools;
+}
+export function getRunnerPool(service: ModelService): RunnerSlot[] {
+  return pools[service] ?? [];
+}
+export function useRunnerPools(): RunnerPools {
+  return useSyncExternalStore(subscribe, () => pools, () => pools);
+}
+
+// ── heads (the llm client) ────────────────────────────────────────────────────
+export function getLLMConfigList(): LLMConfigList {
+  return heads;
+}
+export function getLLMConfig(service: ModelService): LLMConfig | null {
+  return heads[service] ?? null;
 }

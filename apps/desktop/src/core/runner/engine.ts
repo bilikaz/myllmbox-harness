@@ -11,7 +11,7 @@
 
 import type { LLMConfig } from "../config/llm.ts";
 import type { ModelService } from "../../llm/types.ts";
-import { modelKey, type RunnerPools, type RunnerSlot } from "../config/pools.ts";
+import { modelKey, type RunnerPools, type RunnerSlot } from "../config/llm.ts";
 
 // A held slot: identity (`id` — the surfaced slot token), the model it pins to, and the
 // resolved target to call. `background` marks a sub-agent run (counts against the open band, frees a

@@ -16,8 +16,7 @@ import {
   type ReasoningEffort,
   type TextProviderKind,
 } from "../llm/types.ts";
-import { writeLLMConfig, type LLMConfig, type LLMConfigList } from "./config/llm.ts";
-import { writeRunnerPools, type RunnerPools, type RunnerSlot } from "./config/pools.ts";
+import { writeRunnerPools, type LLMConfig, type RunnerPools, type RunnerSlot } from "./config/llm.ts";
 import { listProviderModels } from "../llm/index.ts";
 import { errorMessage } from "../lib/errors.ts";
 
@@ -182,9 +181,7 @@ class Settings extends Consumer<SettingsState> {
   protected override notify(): void {
     this.chatCache = null;
     this.regCache = null;
-    const slice: LLMConfigList = {};
-    for (const svc of ALL_SERVICES) slice[svc] = this.resolveConfig(svc) ?? undefined;
-    writeLLMConfig(slice);
+    // One write: the resolved pools. `config.llm[service]` (the head) is derived from them in config/llm.ts.
     writeRunnerPools(this.resolvePools());
     super.notify();
   }

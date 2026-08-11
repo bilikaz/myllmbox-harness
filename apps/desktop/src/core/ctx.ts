@@ -11,7 +11,7 @@ import type { HostApi } from "./host.ts";
 import { SessionEngine } from "./sessions/engine.ts";
 import { GraphEngine } from "./graph/index.ts";
 import { RunnerEngine, applyRunnerEvent } from "./runner/index.ts";
-import { getRunnerPools } from "./config/pools.ts";
+import { getRunnerPools } from "./config/llm.ts";
 
 export class Ctx {
   llm!: LLMClient;
