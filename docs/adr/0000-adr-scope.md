@@ -31,7 +31,7 @@ What does **not** land here, and where it goes instead:
   updated directly when the workflow changes. No ADR mirrors it, **with one
   recorded exception (below).**
 - **Restatements** — content that lives elsewhere is pointed at, never copied
-  (the [documentation convention](../conventions/documentation.md) already says
+  (the [documentation instruction](../instructions/documentation.md) already says
   this for convention adoptions; it applies to everything).
 
 ## Recorded exception — the independent drift review

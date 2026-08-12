@@ -50,7 +50,7 @@ Remove, across the tree:
   that the KB is cut, not deferred).
 
 The precise supersede/archive-with-stub moves are in `implementation.md` and executed
-in the end-of-session docs pass ([documentation](../../conventions/documentation.md)
+in the end-of-session docs pass ([documentation](../../instructions/documentation.md)
 rule 2). The initial commit is pushed, so ADRs are superseded, never deleted.
 
 ## Acceptance criteria (done-whens)

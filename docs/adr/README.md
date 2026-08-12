@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-Dated, immutable log (see [conventions/documentation.md](../conventions/documentation.md)).
+Dated, immutable log (see [instructions/documentation.md](../instructions/documentation.md)).
 One decision per ADR; supersede, don't rewrite. Scope is gated by
 [ADR-0000](0000-adr-scope.md): architectural decisions only — bug fixes and
 procedures don't land here. The map of current structure is

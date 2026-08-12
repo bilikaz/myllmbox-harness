@@ -188,5 +188,5 @@ only the remote attach and account-tool wiring are removed.
    round-trips and re-hydrates after reload from local storage; no Account section,
    no remote sidebar entry, no memory tools advertised.
 5. **Docs pass** (end-of-session) — map is current truth; `knowledge.md` removed; the
-   obsoleted ADRs superseded + archived-with-stubs ([documentation](../../conventions/documentation.md)
+   obsoleted ADRs superseded + archived-with-stubs ([documentation](../../instructions/documentation.md)
    rule 2); glossary terms retired; a new ADR records the local-only posture.

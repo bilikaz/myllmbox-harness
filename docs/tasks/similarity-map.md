@@ -195,8 +195,9 @@ is the point); listed so the "media tool" shape is named and the shared helpers 
 
 ## Suggested order of attack (payoff × mechanical-ness)
 
-1. **Family 6 + Family 1's exact twins** — `approvals`≡`select`, `config/llm`≡`config/pools`: extract
-   `createRequestBridge` + a generic derived-list store. Small, safe, deletes real duplication.
+1. ~~**Family 6 + Family 1's exact twins** — `approvals`≡`select`, `config/llm`≡`config/pools`.~~ **DONE.**
+   `approvals.ts` now hosts `createRequestBridge` (select reuses it); `config/pools.ts` merged into
+   `config/llm.ts` (it was the same data — heads = pool[0].config — so a true merge, not a shared factory).
 2. **Family 2** — the `globModules` primitive + one `ownerFromPath`. Mechanical, touches boot + both registries.
 3. **Family 9** — `mediaHandler(kind)`, the shared regex. Trivial.
 4. **Family 1 A1/A2** — a `createStore`/`createCrudStore` factory for the ~10 hand-rolled stores.

@@ -10,7 +10,7 @@ than a line or two) to the same folder.
 
 The iteration flow and what each doc contains are in [/CLAUDE.md](../../CLAUDE.md); the
 fixed anatomy of `implementation.md` is
-[documentation convention rule 6](../conventions/documentation.md); the drift reviewer's
+[documentation instruction rule 6](../instructions/documentation.md); the drift reviewer's
 brief is [../instructions/drift.md](../instructions/drift.md). The settled design set the
 tasks execute is the [architecture hub](../ARCHITECTURE.md) + the
 [ADR log](../adr/README.md).

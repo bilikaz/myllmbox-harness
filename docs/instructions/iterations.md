@@ -17,7 +17,7 @@ approve the *intent*. There is no separate PRD artifact; this is it.
 ### `implementation.md` — the build guide (how)
 
 What will be built, concrete enough to review before building, in the **fixed anatomy** of
-[documentation convention rule 6](../conventions/documentation.md): per-root overview tables → mermaid flows →
+[documentation instruction rule 6](documentation.md): per-root overview tables → mermaid flows →
 contract tables (deferred items marked) → data shapes → `Path | Files | What` touch-lists → key logic sketches
 → verification plan. Kept **in sync** while building as decisions shift — this is the shared-understanding
 artifact the user reads to confirm we're aligned.

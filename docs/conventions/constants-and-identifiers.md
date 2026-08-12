@@ -11,7 +11,7 @@ Unnamed literals are where behavior hides.
    window minimums — is a named `UPPER_SNAKE` module-level const next to its
    use site (`GREP_TIMEOUT_MS`, `OUTPUT_CAP`, `MAX_HEAL_ATTEMPTS`). The name
    states the unit (`_MS`, `_BYTES`) when one exists; the comment states why
-   that value (see documentation.md — heuristics carry their rationale inline).
+   that value (see ../instructions/documentation.md — heuristics carry their rationale inline).
 2. **Presentation literals stay inline.** Pixel sizes, spacing classes, icon
    dimensions — naming them adds indirection without meaning. The test: would a
    different value change *behavior* or just *looks*?

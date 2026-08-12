@@ -121,7 +121,7 @@ check:
 - **Docs drift** — ADRs, glossary, the architecture hub + area docs, and trees still
   describing the removed/renamed thing (the map is **current truth** — no transient
   scars); a fully-superseded ADR left in the active log instead of archived-with-a-stub,
-  or vice-versa ([documentation](../conventions/documentation.md) rule 2).
+  or vice-versa ([documentation](documentation.md) rule 2).
 - **Convention consistency** — new/changed code against [naming](../conventions/naming.md)
   (role names, the bells test), [types-placement](../conventions/types-placement.md),
   [capability-injection](../conventions/capability-injection.md),

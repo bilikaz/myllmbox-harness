@@ -25,7 +25,12 @@ repository:
 [configuration](../conventions/configuration.md) ·
 [logging](../conventions/logging.md) ·
 [testing](../conventions/testing.md) ·
-[documentation](../conventions/documentation.md)
+[documentation](../instructions/documentation.md)
+
+> **Later:** the *documentation* topic was relocated from `conventions/` to
+> [`instructions/`](../instructions/documentation.md) — a rule about how we author docs is followed where the
+> working process is read (instructions), and skipped on the portable-rules shelf (conventions). The decision
+> to adopt it stands; only its home moved.
 
 Adoption changes applied with this ADR:
 
