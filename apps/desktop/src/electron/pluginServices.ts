@@ -1,54 +1,55 @@
-// Main-side plugin services — the renderer→main path for a plugin's stateful service that is NOT an
-// agent tool. Each src/plugins/<slug>/service.ts may export an `rpc` record of methods its own UI invokes
-// over the bridge (IPC.pluginInvoke), e.g. MySQL connect / disconnect / status. Globbed here in the main
-// bundle, so these reach the SAME service singletons the plugin's local-tier tools import.
+// Main-side plugin objects — each src/plugins/<slug>/plugin.ts exports a BasePlugin subclass. The host globs
+// them, constructs each with the tool registry (its ctor registers the plugin's tools), and wires its event
+// push + rpc + lifecycle. A plugin with neither tools nor a service has no plugin.ts (graph/agents-only, e.g.
+// review). Runs in the main bundle, so these ARE the singletons the plugin's own tools reach.
 
+import { BasePlugin } from "../core/plugins/base.ts";
 import type { ToolRegistry } from "../core/tools/registry.ts";
 
-type Emit = (type: string, payload: unknown) => void;
-type ServiceModule = {
-  rpc?: Record<string, (...args: never[]) => unknown>;
-  subscribe?: (emit: Emit) => void;
-  install?: () => unknown; // lifecycle: bring the service to life (plugin enabled / boot-if-enabled)
-  uninstall?: () => unknown; // lifecycle: tear it down (plugin disabled)
-  bindRegistry?: (registry: ToolRegistry) => void; // receive the main tool registry (runtime tools, e.g. MCP)
-};
-const MODULES = import.meta.glob<ServiceModule>("../plugins/*/service.ts", { eager: true });
+type PluginClass = new (slug: string, registry: ToolRegistry) => BasePlugin;
 
-const modules = new Map<string, ServiceModule>();
+const MODULES = import.meta.glob<Record<string, unknown>>("../plugins/*/plugin.ts", { eager: true });
+
+// slug → the BasePlugin subclass each plugin.ts exports (found by prototype, like the tool/graph globs).
+const classes = new Map<string, PluginClass>();
 for (const [path, mod] of Object.entries(MODULES)) {
   const slug = /\/plugins\/([^/]+)\//.exec(path)?.[1];
-  if (slug) modules.set(slug, mod);
-}
-
-// Wire each plugin service that emits events to the renderer push channel. Called once with a sender
-// (electron/index.ts → win.webContents.send). The service is a singleton, so this subscribes the host to
-// state changes (e.g. a pool opened by an agent query's auto-connect), which the renderer reflects live.
-export function wirePluginEvents(send: (slug: string, type: string, payload: unknown) => void): void {
-  for (const [slug, mod] of modules) {
-    mod.subscribe?.((type, payload) => send(slug, type, payload));
+  if (!slug) continue;
+  for (const v of Object.values(mod)) {
+    if (typeof v === "function" && v.prototype instanceof BasePlugin) classes.set(slug, v as PluginClass);
   }
 }
 
-// Hand each service the main tool registry, so a service can add/remove runtime-discovered tools
-// (MCP). Called once at startup, before any service connect. Mirrors wirePluginEvents.
-export function wirePluginTools(registry: ToolRegistry): void {
-  for (const mod of modules.values()) mod.bindRegistry?.(registry);
+// slug → constructed instance (populated by constructPlugins at boot).
+const plugins = new Map<string, BasePlugin>();
+
+// Construct every plugin with the tool registry — its ctor calls registerTools(), so a plugin owns its own
+// tool registration. Called once at startup, after the registry exists and before any wiring / connect.
+export function constructPlugins(registry: ToolRegistry): void {
+  for (const [slug, Cls] of classes) plugins.set(slug, new Cls(slug, registry));
 }
 
-// Dispatch one service call. "install"/"uninstall" are reserved lifecycle phases → the service's
-// top-level hooks (both optional, no-op if absent); any other method is an rpc call. Throws (the
-// rejection crosses the bridge as the renderer's error) on unknown plugin/method or whatever it throws.
+// Wire each plugin's event channel to the renderer push channel — so plugin UIs reflect live service state.
+// Called once with a sender (electron/index.ts → win.webContents.send), after constructPlugins.
+export function wirePluginEvents(send: (slug: string, type: string, payload: unknown) => void): void {
+  for (const [slug, p] of plugins) p.subscribe((type, payload) => send(slug, type, payload));
+}
+
+// Dispatch one service call. "install"/"uninstall" are reserved lifecycle phases (no-op for a plugin with no
+// plugin.ts); any other method is an rpc call. Throws (crossing the bridge as the renderer's error) on
+// unknown plugin/method or whatever the rpc throws.
 export async function invokePluginService(slug: string, method: string, args: unknown[]): Promise<unknown> {
-  const mod = modules.get(slug);
-  // Lifecycle phases are no-ops for a serviceless plugin (no service.ts) — a legitimate shape
-  // (graph/agents-only). Check phase before the existence guard so install/uninstall never throws on it.
-  if (method === "install" || method === "uninstall") {
-    await mod?.[method]?.();
+  const p = plugins.get(slug);
+  if (method === "install") {
+    p?.install();
     return;
   }
-  if (!mod) throw new Error(`unknown plugin "${slug}"`);
-  const fn = mod.rpc?.[method];
+  if (method === "uninstall") {
+    await p?.uninstall();
+    return;
+  }
+  if (!p) throw new Error(`unknown plugin "${slug}"`);
+  const fn = p.rpc[method];
   if (typeof fn !== "function") throw new Error(`unknown plugin service "${slug}.${method}"`);
   return await (fn as (...a: unknown[]) => unknown)(...args);
 }

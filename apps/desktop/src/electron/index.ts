@@ -7,7 +7,7 @@ import path from "node:path";
 import { registerIpc } from "./ipc.ts";
 import { registerContextMenu } from "./contextMenu.ts";
 import { initBrowserFleet } from "./browserFleet.ts";
-import { wirePluginEvents, wirePluginTools } from "./pluginServices.ts";
+import { wirePluginEvents, constructPlugins } from "./pluginServices.ts";
 import { registry } from "./tools.ts";
 import { IPC } from "./bridge.ts";
 
@@ -84,8 +84,9 @@ function createWindow(): void {
 
 void app.whenReady().then(() => {
   registerIpc(electron);
-  // Give plugin services the tool registry before any connect can register runtime tools (MCP).
-  wirePluginTools(registry);
+  // Construct every plugin with the tool registry — each registers its own tools — before the window
+  // (whose createWindow wires plugin events) and before any connect can register runtime tools (MCP).
+  constructPlugins(registry);
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

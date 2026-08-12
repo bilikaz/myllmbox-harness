@@ -1,7 +1,6 @@
 import { type ToolResult, type ToolSpec, type ToolPermission } from "../../../../core/tools/types.ts";
 import { errorMessage } from "../../../../lib/errors.ts";
 import { BaseDatabaseTool } from "./base.ts";
-import { query } from "../../service.ts";
 import { formatResult } from "../helpers/format.ts";
 
 // Run any SQL against a configured connection. ONE tool — read/write separation gives no real safety (a
@@ -41,7 +40,7 @@ export class DatabaseQuery extends BaseDatabaseTool {
     const { conn, error } = this.pick(name);
     if (error) return { ok: false, output: error };
     try {
-      return { ok: true, output: this.cap(formatResult(await query(conn!, sql))) };
+      return { ok: true, output: this.cap(formatResult(await this.plugin.query(conn!, sql))) };
     } catch (e) {
       return { ok: false, output: `Database error: ${errorMessage(e)}` };
     }

@@ -21,11 +21,10 @@ import { idbRepos } from "../core/storage/idb.ts";
 import type { HostApi, MediaModelsResult, MediaEndpoint } from "../core/host.ts";
 import { errorMessage } from "../lib/errors.ts";
 
-// Web runs all in-process (renderer): general tools only (no workspace/fs tier). Plugin general-tier
-// tools are globbed alongside (the local/ tier needs main, absent in the web bundle).
+// Web runs all in-process (renderer): core general tools only (no workspace/fs tier). Plugins register their
+// own tools main-side (plugin.ts), and no plugin ships a renderer-side tool — so there's no plugin glob here.
 const MODULES = {
   ...import.meta.glob<Record<string, unknown>>("../core/tools/general/*.ts", { eager: true }),
-  ...import.meta.glob<Record<string, unknown>>("../plugins/*/tools/general/*.ts", { eager: true }),
 };
 // The browser host api: save = download via an <a>, mediaModels = a direct fetch. No folder picker in the browser.
 function browserHost(): HostApi {

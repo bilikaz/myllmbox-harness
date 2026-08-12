@@ -5,10 +5,17 @@
 // only read their connection config and call the service.
 
 import { BaseTool } from "../../../../core/tools/base.ts";
-import { isConnected } from "../../service.ts";
+import type { Config } from "../../../../core/config/index.ts";
+import type { Container } from "../../../../core/containers.ts";
+import type { DbPlugin } from "../../plugin.ts";
 import { DATABASE_SLUG, type DbConnection, type DbSettings } from "../../types.ts";
 
 export abstract class BaseDatabaseTool extends BaseTool {
+  // The plugin instance is injected by the factory (DbPlugin.registerTools) so tools reach live pool state.
+  constructor(config: () => Config, container: Container, protected readonly plugin: DbPlugin) {
+    super(config, container);
+  }
+
   protected connections(): DbConnection[] {
     return (this.config().plugins[DATABASE_SLUG]?.settings as DbSettings | undefined)?.connections ?? [];
   }
@@ -28,7 +35,7 @@ export abstract class BaseDatabaseTool extends BaseTool {
   protected pick(name: string): { conn?: DbConnection; error?: string } {
     const { conn, error } = this.find(name);
     if (error) return { error };
-    if (!conn!.password && !isConnected(name)) {
+    if (!conn!.password && !this.plugin.isConnected(name)) {
       return { error: `Connection "${name}" is not connected and has no saved password. Open the Database panel (right sidebar) and connect manually, then retry.` };
     }
     return { conn };

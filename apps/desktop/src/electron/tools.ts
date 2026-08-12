@@ -9,21 +9,19 @@ import type { ToolCallRequest, ToolResult, ToolFilterParams, ToolFilterResult, W
 import { setPageRenderer } from "../core/gallery/render.ts";
 import { renderPageOffscreen } from "./pageRender.ts";
 
+// Core tools only — plugin tools are registered by the plugin itself (plugins/<slug>/plugin.ts →
+// registerTools), constructed at boot with this registry (electron/pluginServices.ts constructPlugins).
 const MODULES = {
   ...import.meta.glob<Record<string, unknown>>("../core/tools/general/*.ts", { eager: true }),
   ...import.meta.glob<Record<string, unknown>>("../core/tools/local/*.ts", { eager: true }),
-  // Plugin tools in the main-process tiers (general = permissionless, local = Node/fs-capable). A
-  // plugin tool needing Node but not a workspace folder (e.g. MySQL) lives in local/ + sets needsWorkspace()=false.
-  ...import.meta.glob<Record<string, unknown>>("../plugins/*/tools/general/*.ts", { eager: true }),
-  ...import.meta.glob<Record<string, unknown>>("../plugins/*/tools/local/*.ts", { eager: true }),
 };
 
 // Re-seeded from each call's wire before the registry touches it; the getter reads the current binding, so
 // tools (and the clients they derive) see live config. The container rides on the wire (execTool) / params
 // (toolFilter) and is passed to resolve(), so `this.container` in a tool is the active session's container.
 let config: Config = getConfig();
-// Exported so the host can hand it straight to plugin services (wirePluginTools) for runtime tool
-// registration — plugins register into THIS registry, no separate registrar wrapper.
+// Exported so the host constructs each plugin with THIS registry (pluginServices.constructPlugins) — a
+// plugin registers its own tools into it (static + MCP's runtime), no separate registrar wrapper.
 export const registry = new ToolRegistry(() => config, MODULES);
 const runner = new ToolRunner(registry);
 // Gallery pages render in main via an offscreen window — inject the platform muscle into the core port.
